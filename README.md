@@ -10,6 +10,12 @@ Görme engelli kişiler için hazırlanmış, tamamen Türkçe bir Android uygul
 - Her gün aynı saatte **bildirimle hatırlatır**; “Aldım” denmezse 10 ve 20
   dakika sonra tekrar hatırlatır.
 - Uygulama konuşurken siz konuşmaya başlarsanız **susar ve sizi dinler**.
+- **TalkBack açıksa** kendi sesiyle değil **TalkBack üzerinden** konuşur;
+  iki ses üst üste binmez.
+- Kod kamerada görünüp okunamadığında **park sensörü gibi bip** sesleriyle
+  yönlendirir; 15 saniye kod bulunamazsa ipucu verir.
+- Telefonda **Türkçe ses yoksa** bunu büyük yazıyla gösterir ve nasıl
+  yükleneceğini anlatır.
 
 ## Nasıl çalıştırılır?
 
@@ -32,8 +38,9 @@ Görme engelli kişiler için hazırlanmış, tamamen Türkçe bir Android uygul
    ```
 
 4. Telefonda şunlar olmalı:
-   - **Türkçe metin okuma sesi:** Ayarlar → Erişilebilirlik → Metin okuma
-     çıktısı bölümünden Türkçe sesi indirin.
+   - **Türkçe metin okuma sesi:** Ayarlar > Metin okuma > Google > Ses
+     verilerini yükle > Türkçe. (Yoksa uygulama açılışta bunu büyük yazıyla
+     gösterir; “Ses ayarlarını aç” düğmesi sizi oraya götürür.)
    - **Türkçe konuşma tanıma:** Google uygulaması yüklü ve güncel olmalı.
      İnternetsiz kullanmak için Google ayarlarından Türkçe çevrimdışı konuşma
      tanıma paketini indirebilirsiniz.
@@ -91,7 +98,8 @@ flutter test      # saat ayrıştırma, komut, ajanda ve karekod testleri
 ### Sesli komutlar
 
 **Ekranın herhangi bir yerine iki kez dokunun** (ya da “Sesli komut ver”
-düğmesine basın) ve şunlardan birini söyleyin:
+düğmesine basın) ve şunlardan birini söyleyin. TalkBack açıksa aşağıdaki
+“TalkBack ile kullanım” bölümüne bakın.
 
 | Söyleyin | Ne olur |
 | --- | --- |
@@ -105,25 +113,55 @@ düğmesine basın) ve şunlardan birini söyleyin:
 | “kamera izni” | Kamera iznini yeniden ister |
 | “yardım” | Komutları sayar |
 | “sus” | Uygulamayı susturur |
+| “bip sesini kapat” / “bip sesini aç” | Bip ile yönlendirmeyi kapatır / açar (ayar kalıcıdır) |
 
 **Sözünü kesme:** Uygulama uzun bir cümle söylerken konuşmaya başlarsanız
 (örneğin “feneri aç”), uygulama susar ve söylediğinizi yapar.
 
-### Ekran ve TalkBack
+### Bip sesiyle yönlendirme
+
+- Kamera bir kod görüp henüz okuyamadığında kısa **bip** sesleri çalar.
+  Kod **ekranın ortasına** ve **kameraya yaklaştıkça** bipler hızlanır
+  (park sensörü gibi). Kod okununca bip durur.
+- Uygulama konuşurken ya da sizi dinlerken bip çalmaz.
+- **15 saniye** boyunca hiç kod bulunamazsa: “Kutuyu yavaşça çevirin,
+  karekod genelde kutunun yan yüzündedir.” der. Kod hâlâ bulunamazsa 30
+  saniye sonra bir kez daha söyler, sonra bir kod görene kadar susar.
+- “bip sesini kapat” / “bip sesini aç” diyerek ya da ekrandaki **“Bip sesiyle
+  yönlendirme”** anahtarıyla açıp kapatabilirsiniz.
+
+### TalkBack ile kullanım
+
+- **TalkBack açıksa** uygulama kendi sesini (flutter_tts) kullanmaz; her şeyi
+  TalkBack'e duyurur. Böylece iki ses aynı anda konuşmaz. TalkBack açılıp
+  kapanınca uygulama bunu fark eder ve sesli haber verir.
+- TalkBack açıkken **“ekranın her yerine iki kez dokunma”** çalışmaz, çünkü
+  TalkBack iki kez dokunmayı “seçili öğeye bas” olarak kullanır. Bunun yerine:
+  - Ekranın üst yarısındaki **kamera alanına** dokunun, sonra iki kez dokunun,
+  - ya da **“Sesli komut ver”** düğmesine dokunun, sonra iki kez dokunun.
+
+  Uygulama bunu açılışta sesli olarak anlatır.
+- TalkBack açıkken dinleme, TalkBack'in kendi sesi mikrofona karışmasın diye
+  kısa bir beklemeden sonra başlar. Uygulamanın sözünü kesme özelliği
+  TalkBack açıkken kapalıdır; TalkBack'i susturmak için ekrana dokunun.
+
+### Ekran
 
 - Siyah zemin, beyaz yazı, büyük sarı düğmeler.
 - Altta **“Hatırlatmalarım”** listesi büyük yazıyla durur; her satırda
   “Sil” düğmesi vardır. TalkBack satırı “Her gün sabah saat 09:00, majezik…”
   diye okur.
-- TalkBack açıkken kamera alanına odaklanıp iki kez dokunmak da dinlemeyi
-  başlatır.
 
 ## Kod ne yapıyor? (basitçe)
 
 | Dosya | Ne işe yarar |
 | --- | --- |
 | `lib/main.dart` | Ekran ve konuşma akışları: izinler, karekod okuma, hatırlatma kurma, silme, aldım/ertele, sesli komutlar. |
-| `lib/ses.dart` | Konuşma (`flutter_tts`) ve dinleme (`speech_to_text`, `tr_TR`). Uygulama konuşurken araya girilince susmayı da burası yapar. |
+| `lib/ses.dart` | Dinleme (`speech_to_text`, `tr_TR`), Türkçe ses kontrolü ve araya girince susma. Konuşmayı `Duyurucu` üzerinden yapar. |
+| `lib/duyurucu.dart` | **Tek karar noktası:** TalkBack açıksa duyuruyu TalkBack'e (`SemanticsService`), kapalıysa `flutter_tts`'e verir. |
+| `lib/bip.dart` | Bip aralığını kodun konumuna ve büyüklüğüne göre hesaplar; 15 saniye ipucu zamanlaması. |
+| `lib/ayarlar.dart` | Bip açık/kapalı ayarını saklar. |
+| `lib/cihaz.dart` + `MainActivity.kt` | Android'e özel: bip sesini çalar (`ToneGenerator`), ses ayarlarını açar. |
 | `lib/saat_ayristir.dart` | Söylenen cümleden saati bulan saf Dart fonksiyonu (`saatiAyikla`). |
 | `lib/komutlar.dart` | Cümleden komutu (“feneri aç”, “aldım”…) ve evet/hayır cevabını anlayan kod. |
 | `lib/ajanda.dart` | Hatırlatma listesi: ekleme, silme, saate göre bulma, sesli okuma metni; `shared_preferences` ile kalıcı saklama. |

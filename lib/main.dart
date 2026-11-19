@@ -7,6 +7,9 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:vibration/vibration.dart';
 
 import 'ajanda.dart';
+import 'ayarlar.dart';
+import 'bip.dart';
+import 'cihaz.dart';
 import 'hatirlatma_servisi.dart';
 import 'ilac_veritabani.dart';
 import 'karekod.dart';
@@ -69,8 +72,20 @@ class _TaramaEkraniState extends State<TaramaEkrani>
   static const _yardimMetni =
       'Şunları söyleyebilirsiniz: tekrar söyle. Feneri aç. Feneri kapat. '
       'Ajandamı oku. Dokuzdaki hatırlatmayı sil. Aldım. Ertele. Sus. '
+      'Bip sesini kapat. Bip sesini aç. '
       'Bir ilaç okuttuktan sonra, her gün saat dokuzda hatırlat da '
       'diyebilirsiniz.';
+
+  static const _ekranOkuyucuAnlatimi =
+      'TalkBack açık. Ben de TalkBack üzerinden konuşacağım. TalkBack '
+      'açıkken ekranın her yerine iki kez dokunmak çalışmaz. Sesli komut '
+      'vermek için ekranın üst yarısındaki kamera alanına ya da Sesli komut '
+      'ver düğmesine dokunun, sonra iki kez dokunun.';
+  static const _turkceSesAnlatimi =
+      'Telefonunuzda Türkçe ses paketi yüklü değil. Yüklemek için telefonun '
+      'Ayarlar bölümünde Metin okuma, sonra Google, sonra Ses verilerini '
+      'yükle, sonra Türkçe seçeneğine gidin. Ekrandaki Ses ayarlarını aç '
+      'düğmesi sizi oraya götürür.';
 
   // Kamera, izin verildikten sonra elle başlatılır.
   final MobileScannerController _kamera = MobileScannerController(
@@ -80,6 +95,20 @@ class _TaramaEkraniState extends State<TaramaEkrani>
   final SesServisi _ses = SesServisi();
   final AjandaDeposu _depo = AjandaDeposu();
   late final HatirlatmaServisi _servis = HatirlatmaServisi(depo: _depo);
+  final AyarDeposu _ayarlar = AyarDeposu();
+
+  // Bip ile yönlendirme ve "kod bulunamadı" ipucu.
+  bool _bipAcik = true;
+  Duration? _bipAraligi;
+  DateTime _sonAlgilama = DateTime.fromMillisecondsSinceEpoch(0);
+  Timer? _bipZamanlayici;
+  final AramaIpucu _aramaIpucu = AramaIpucu();
+  Timer? _ipucuZamanlayici;
+
+  bool _onPlanda = true;
+
+  /// TalkBack açık mı? Ekrandaki açıklamalar buna göre değişir.
+  bool _ekranOkuyucuAcik = false;
 
   IlacVeritabani _ilaclar = IlacVeritabani({});
   Ajanda _ajanda = Ajanda();
@@ -112,6 +141,8 @@ class _TaramaEkraniState extends State<TaramaEkrani>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _bipleriDurdur();
+    _ipucuZamanlayici?.cancel();
     unawaited(_ses.sustur());
     unawaited(_kamera.dispose());
     super.dispose();
@@ -119,7 +150,14 @@ class _TaramaEkraniState extends State<TaramaEkrani>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState durum) {
+    _onPlanda = durum == AppLifecycleState.resumed;
+    if (!_onPlanda) _bipleriDurdur();
     if (durum != AppLifecycleState.resumed || !_acilisBitti) return;
+    // Kullanıcı ses ayarlarından Türkçe sesi yüklemiş olabilir.
+    unawaited(() async {
+      await _ses.turkceSesiDenetle();
+      if (mounted) setState(() {});
+    }());
     // Kullanıcı ayarlardan izin vermiş ya da bildirim düğmesine basmış olabilir.
     // Tam zamanlı alarm izni yeni verildiyse bildirimler tam saate göre
     // yeniden kurulur.
@@ -141,12 +179,38 @@ class _TaramaEkraniState extends State<TaramaEkrani>
     }
   }
 
+  /// TalkBack açılıp kapanınca konuşma yolu değişir; kullanıcıya anlatılır.
+  @override
+  void didChangeAccessibilityFeatures() {
+    final acik = _ses.ekranOkuyucuAcik;
+    if (acik == _ekranOkuyucuAcik) return;
+    setState(() => _ekranOkuyucuAcik = acik);
+    if (!_acilisBitti) return;
+    unawaited(
+      _mesgulken(
+        () => _konus(
+          acik
+              ? _ekranOkuyucuAnlatimi
+              : 'TalkBack kapandı. Artık ekranın herhangi bir yerine iki kez '
+                    'dokunarak sesli komut verebilirsiniz.',
+        ),
+      ),
+    );
+  }
+
+  /// "Tekrar denemek için ..." gibi cümlelerde dinlemenin nasıl başlatılacağı.
+  String get _dinlemeTarifi => _ekranOkuyucuAcik
+      ? 'Sesli komut ver düğmesine iki kez dokunun'
+      : 'ekrana iki kez dokunun';
+
   // ---------------------------------------------------------------------
   // Açılış ve izinler
   // ---------------------------------------------------------------------
 
   Future<void> _baslat() async {
     await _ses.hazirla();
+    _ekranOkuyucuAcik = _ses.ekranOkuyucuAcik;
+    _bipAcik = await _ayarlar.bipAcikMi();
     _ilaclar = await IlacVeritabani.yukle();
     _ajanda = await _depo.yukle();
     try {
@@ -157,18 +221,30 @@ class _TaramaEkraniState extends State<TaramaEkrani>
     }
     if (mounted) setState(() {});
 
+    if (!_ses.turkceSesHazir) {
+      await _ses.soyle(_turkceSesAnlatimi, kesilebilir: false);
+    }
     await _mikrofonIzniniAl();
     await _kameraIzniniAl();
 
     final acilis = await _servis.acilisBildirimi();
     _mesgul = false;
     _acilisBitti = true;
+    _aramaIpucu.sifirla(DateTime.now());
+    _ipucuZamanlayici = Timer.periodic(
+      const Duration(seconds: 1),
+      (_) => _ipucuKontrol(),
+    );
     if (acilis != null) {
       await _bildirimYaniti(acilis);
     } else {
+      final sesliKomut = !_mikrofonVar
+          ? ''
+          : _ekranOkuyucuAcik
+          ? _ekranOkuyucuAnlatimi
+          : 'Sesli komut vermek için ekrana iki kez dokunun.';
       await _konus(
-        'İlaç Asistanı hazır. İlacın karekodunu kameraya tutun. '
-        '${_mikrofonVar ? 'Sesli komut vermek için ekrana iki kez dokunun.' : ''}',
+        'İlaç Asistanı hazır. İlacın karekodunu kameraya tutun. $sesliKomut',
       );
     }
   }
@@ -215,7 +291,7 @@ class _TaramaEkraniState extends State<TaramaEkrani>
       if (cevap.yanit != Yanit.evet) {
         await _konus(
           'Tamam, kamera kapalı kalacak ve karekod okuyamayacağım. Fikrinizi '
-          'değiştirirseniz ekrana iki kez dokunup kamera izni deyin.',
+          'değiştirirseniz $_dinlemeTarifi ve kamera izni deyin.',
         );
         return;
       }
@@ -372,12 +448,21 @@ class _TaramaEkraniState extends State<TaramaEkrani>
   }
 
   Future<void> _kodOkundu(BarcodeCapture yakalama) async {
-    if (_mesgul || _ses.konusuyor || _ses.dinliyor.value) return;
     if (yakalama.barcodes.isEmpty) return;
-    final ham = yakalama.barcodes.first.rawValue;
-    if (ham == null || ham.isEmpty) return;
-
     final simdi = DateTime.now();
+    _aramaIpucu.sifirla(simdi);
+    final okunanlar = yakalama.barcodes
+        .where((b) => (b.rawValue ?? '').isNotEmpty)
+        .toList();
+    if (okunanlar.isEmpty) {
+      // Kod görüldü ama çözülemedi: bip sesleriyle yönlendir.
+      _yonlendir(yakalama.barcodes.first, yakalama.size, simdi);
+      return;
+    }
+    _bipleriDurdur();
+
+    if (_mesgul || _ses.konusuyor || _ses.dinliyor.value) return;
+    final ham = okunanlar.first.rawValue!;
     if (ham == _sonKod &&
         simdi.difference(_sonOkumaZamani) < _tekrarBeklemeSuresi) {
       return;
@@ -411,6 +496,65 @@ class _TaramaEkraniState extends State<TaramaEkrani>
         await _hatirlatmaAkisi(sor: true);
       }
     });
+  }
+
+  // ---------------------------------------------------------------------
+  // Bip ile yönlendirme ve "kod bulunamadı" ipucu
+  // ---------------------------------------------------------------------
+
+  bool get _bosta =>
+      _onPlanda && !_mesgul && !_ses.konusuyor && !_ses.dinliyor.value;
+
+  void _yonlendir(Barcode kod, Size goruntu, DateTime simdi) {
+    _bipAraligi =
+        bipAraligi(kod.corners, goruntu) ?? const Duration(milliseconds: 600);
+    _sonAlgilama = simdi;
+    if (_bipZamanlayici == null) _bipCal();
+  }
+
+  /// Kod görülmeye devam ettiği sürece, hesaplanan aralıkla bip çalar.
+  /// Konuşurken ya da dinlerken çalmaz (mikrofon bip sesini duymasın).
+  void _bipCal() {
+    final aralik = _bipAraligi;
+    final guncel =
+        DateTime.now().difference(_sonAlgilama) <
+        const Duration(milliseconds: 800);
+    if (!_bipAcik || aralik == null || !guncel || !_bosta) {
+      _bipZamanlayici = null;
+      return;
+    }
+    unawaited(Cihaz.bip());
+    _bipZamanlayici = Timer(aralik, _bipCal);
+  }
+
+  void _bipleriDurdur() {
+    _bipZamanlayici?.cancel();
+    _bipZamanlayici = null;
+    _bipAraligi = null;
+  }
+
+  Future<void> _bipAyarla(bool acik) async {
+    await _ayarlar.bipAyarla(acik);
+    if (!acik) _bipleriDurdur();
+    if (mounted) setState(() => _bipAcik = acik);
+    await _konus(
+      acik
+          ? 'Bip sesi açıldı. Kod görünüp okunamadığında bip sesleriyle '
+                'yönlendireceğim.'
+          : 'Bip sesi kapatıldı. Açmak için bip sesini aç deyin.',
+    );
+  }
+
+  /// Saniyede bir çalışır: 15 saniye boyunca kod bulunamazsa ipucu verir.
+  void _ipucuKontrol() {
+    final simdi = DateTime.now();
+    if (!_kameraIzniVar || !_bosta) {
+      _aramaIpucu.mesgulOldu(simdi);
+      return;
+    }
+    if (_aramaIpucu.ipucuVerilsinMi(simdi)) {
+      unawaited(_mesgulken(() => _konus(AramaIpucu.metin)));
+    }
   }
 
   // ---------------------------------------------------------------------
@@ -646,7 +790,7 @@ class _TaramaEkraniState extends State<TaramaEkrani>
       if (mounted) setState(() => _durum = 'Dinliyorum...');
       final cevap = await _ses.dinle();
       if (cevap == null) {
-        await _konus('Bir şey duyamadım. Tekrar denemek için iki kez dokunun.');
+        await _konus('Bir şey duyamadım. Tekrar denemek için $_dinlemeTarifi.');
       } else {
         await _komutIsle(cevap);
       }
@@ -683,6 +827,10 @@ class _TaramaEkraniState extends State<TaramaEkrani>
         await _konus(_yardimMetni);
       case KomutTuru.sus:
         await _ses.sustur();
+      case KomutTuru.bipAc:
+        await _bipAyarla(true);
+      case KomutTuru.bipKapat:
+        await _bipAyarla(false);
       case KomutTuru.bilinmiyor:
         await _konus(
           'Anlayamadım. Neler yapabileceğimi duymak için yardım deyin.',
@@ -741,7 +889,9 @@ class _TaramaEkraniState extends State<TaramaEkrani>
           ? 'Kamera açık. İlacın karekodunu ya da barkodunu telefonun '
                 'arkasına doğru tutun.'
           : 'Kamera kapalı. Kamera izni verilmedi.',
-      hint: 'Sesli komut vermek için iki kez dokunun',
+      hint:
+          'Sesli komut vermek için iki kez dokunun. Ekranın başka yerine '
+          'iki kez dokunmak TalkBack açıkken çalışmaz.',
       image: true,
       onTap: _dinlemeyiBaslat,
       child: ExcludeSemantics(
@@ -766,6 +916,7 @@ class _TaramaEkraniState extends State<TaramaEkrani>
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
+        if (!_ses.turkceSesHazir) _turkceSesUyarisi(),
         ValueListenableBuilder<bool>(
           valueListenable: _ses.dinliyor,
           builder: (context, dinliyor, _) => dinliyor
@@ -823,6 +974,20 @@ class _TaramaEkraniState extends State<TaramaEkrani>
             );
           },
         ),
+        const SizedBox(height: 8),
+        SwitchListTile(
+          value: _bipAcik,
+          onChanged: (acik) => _mesgulken(() => _bipAyarla(acik)),
+          activeThumbColor: Colors.yellow,
+          title: const Text(
+            'Bip sesiyle yönlendirme',
+            style: TextStyle(fontSize: 24, color: Colors.white),
+          ),
+          subtitle: const Text(
+            'Kod görünüp okunamadığında bip çalar; kod yaklaştıkça hızlanır.',
+            style: TextStyle(fontSize: 18, color: Colors.white70),
+          ),
+        ),
         const SizedBox(height: 24),
         Semantics(
           header: true,
@@ -844,6 +1009,52 @@ class _TaramaEkraniState extends State<TaramaEkrani>
           ),
         for (final h in hatirlatmalar) _hatirlatmaSatiri(h),
       ],
+    );
+  }
+
+  /// Telefonda Türkçe ses yoksa en üstte duran büyük uyarı.
+  Widget _turkceSesUyarisi() {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        border: Border.all(color: Colors.yellow, width: 4),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Text(
+            'Türkçe ses yüklü değil',
+            style: TextStyle(
+              fontSize: 30,
+              fontWeight: FontWeight.bold,
+              color: Colors.yellow,
+            ),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Uygulamanın Türkçe konuşabilmesi için telefona Türkçe ses '
+            'yükleyin:\nAyarlar > Metin okuma > Google > Ses verilerini '
+            'yükle > Türkçe',
+            style: TextStyle(fontSize: 24, color: Colors.white),
+          ),
+          const SizedBox(height: 12),
+          _BuyukDugme(
+            yazi: 'Ses ayarlarını aç',
+            ipucu: 'Telefonun metin okuma ayarlarını açar',
+            simge: Icons.settings_voice,
+            onPressed: () async {
+              if (!await Cihaz.sesAyarlariniAc()) {
+                await _konus(
+                  'Ayarlar açılamadı. Telefonun Ayarlar bölümünden Metin '
+                  'okuma seçeneğini bulun.',
+                );
+              }
+            },
+          ),
+        ],
+      ),
     );
   }
 

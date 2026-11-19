@@ -16,6 +16,8 @@ enum KomutTuru {
   kameraIzni,
   yardim,
   sus,
+  bipAc,
+  bipKapat,
   bilinmiyor,
 }
 
@@ -97,6 +99,12 @@ Komut komutuTani(String cumle) {
     return const Komut(KomutTuru.ajandaOku);
   }
   if (hatirlatmaGeciyor) return Komut(KomutTuru.hatirlatmaKur, saat: saat);
+  // "bip sesini kapat" fener ya da "sus" komutlarından önce denenir.
+  if (_baslayan(k, ['bip', 'bib'])) {
+    return _baslayan(k, ['kapa', 'sus', 'kes', 'durdur', 'istemiyorum'])
+        ? const Komut(KomutTuru.bipKapat)
+        : const Komut(KomutTuru.bipAc);
+  }
   if (_baslayan(k, ['fener', 'ışık', 'ışığ', 'lamba', 'flaş'])) {
     if (_baslayan(k, ['kapa', 'söndür'])) {
       return const Komut(KomutTuru.fenerKapat);

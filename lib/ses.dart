@@ -1,5 +1,6 @@
-/// Uygulamanın konuşması (flutter_tts) ve kullanıcıyı dinlemesi
-/// (speech_to_text) burada toplanır.
+/// Uygulamanın konuşması ve kullanıcıyı dinlemesi (speech_to_text) burada
+/// toplanır. Konuşmanın TTS ile mi TalkBack ile mi yapılacağına [Duyurucu]
+/// karar verir.
 library;
 
 import 'dart:async';
@@ -9,6 +10,7 @@ import 'package:flutter_tts/flutter_tts.dart';
 import 'package:speech_to_text/speech_recognition_error.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 
+import 'duyurucu.dart';
 import 'komutlar.dart';
 import 'turkce.dart';
 
@@ -18,8 +20,23 @@ class SesServisi {
   /// bu kadar kelimelik cümlelerde araya girme dinlenir.
   static const int sozKesmeIcinEnAzKelime = 6;
 
+  /// TalkBack açıkken dinlemeye başlamadan önce beklenen süre: TalkBack'in
+  /// "iki kez dokun" sonrası kendi geri bildirimi mikrofona karışmasın.
+  static const Duration ekranOkuyucuSonrasiBekleme = Duration(
+    milliseconds: 800,
+  );
+
   final FlutterTts _tts = FlutterTts();
   final SpeechToText _stt = SpeechToText();
+  late final Duyurucu duyurucu = Duyurucu.uygulama(_tts);
+
+  /// TalkBack ya da başka bir ekran okuyucu açık mı?
+  bool get ekranOkuyucuAcik => duyurucu.yol == DuyuruYolu.ekranOkuyucu;
+
+  bool _turkceSesHazir = true;
+
+  /// Telefonda Türkçe metin okuma sesi yüklü mü? [hazirla] sonrası geçerli.
+  bool get turkceSesHazir => _turkceSesHazir;
 
   /// Ekranda "Dinliyorum" göstergesi için.
   final ValueNotifier<bool> dinliyor = ValueNotifier(false);
@@ -39,6 +56,20 @@ class SesServisi {
     await _tts.setSpeechRate(0.5);
     // speak() konuşma bitene kadar beklesin; böylece sözler üst üste binmez.
     await _tts.awaitSpeakCompletion(true);
+    await turkceSesiDenetle();
+  }
+
+  /// Türkçe sesin yüklü olup olmadığını yeniden kontrol eder (kullanıcı
+  /// ayarlardan yükleyip geri dönmüş olabilir).
+  Future<void> turkceSesiDenetle() async {
+    try {
+      _turkceSesHazir = turkceSesHazirMi(
+        mevcut: await _tts.isLanguageAvailable('tr-TR'),
+        yuklu: await _tts.isLanguageInstalled('tr-TR'),
+      );
+    } catch (e) {
+      debugPrint('Türkçe ses denetlenemedi: $e');
+    }
   }
 
   /// Konuşma tanımayı başlatır. Mikrofon izni verilmiş olmalıdır.
@@ -95,7 +126,7 @@ class SesServisi {
 
   /// Uygulamayı susturur ve dinlemeyi bırakır.
   Future<void> sustur() async {
-    await _tts.stop();
+    await duyurucu.sustur();
     await _oturumuKapat();
   }
 
@@ -103,6 +134,9 @@ class SesServisi {
   Future<String?> dinle({Duration sure = const Duration(seconds: 8)}) async {
     if (!_sttHazir) return null;
     await sustur();
+    if (ekranOkuyucuAcik) {
+      await Future<void>.delayed(ekranOkuyucuSonrasiBekleme);
+    }
     _sonucIsleyici = (metin, son) {
       _sonDuyulan = metin;
       if (son) _tamamla(metin);
@@ -118,7 +152,9 @@ class SesServisi {
 
   /// Metni sesli söyler.
   ///
-  /// Uzun cümlelerde konuşurken mikrofonu da dinler. Kullanıcı araya girip
+  /// TalkBack açıksa duyuru TalkBack'e verilir ve araya girme dinlenmez
+  /// (mikrofon TalkBack'i duyacağı için). TalkBack kapalıyken uzun
+  /// cümlelerde konuşurken mikrofonu da dinler. Kullanıcı araya girip
   /// konuşursa uygulama hemen susar ve kullanıcının söylediğini döner.
   /// Araya girilmezse `null` döner.
   Future<String?> soyle(String metin, {bool kesilebilir = true}) async {
@@ -126,6 +162,7 @@ class SesServisi {
     final kesmeDinlensin =
         kesilebilir &&
         _sttHazir &&
+        !ekranOkuyucuAcik &&
         kelimeler(metin).length >= sozKesmeIcinEnAzKelime;
 
     _konusuyor = true;
@@ -134,11 +171,11 @@ class SesServisi {
     if (kesmeDinlensin) {
       kesme = _arayaGirmeyiDinle(metin, () {
         kesildi = true;
-        unawaited(_tts.stop());
+        unawaited(duyurucu.sustur());
       });
     }
     try {
-      await _tts.speak(metin);
+      await duyurucu.duyur(metin);
     } finally {
       _konusuyor = false;
     }
