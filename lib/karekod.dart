@@ -167,25 +167,54 @@ DateTime? tarihCoz(String yyaagg) {
 String ayYilYaz(DateTime tarih) => '${_aylar[tarih.month - 1]} ${tarih.year}';
 
 /// Okunan kod için sesli söylenecek Türkçe metni hazırlar.
-String sesliMetinHazirla(String ham, {DateTime? bugun}) {
+///
+/// [ilacAdi] verilirse (TİTCK listesinde bulunduysa) cümlenin başında
+/// ilacın adı söylenir. [adListedeYok] doğruysa ve bu bir ilaç karekoduysa
+/// adın listede bulunamadığı söylenir.
+String sesliMetinHazirla(
+  String ham, {
+  DateTime? bugun,
+  String? ilacAdi,
+  bool adListedeYok = false,
+}) {
   final ilac = karekoduCoz(ham);
+  final adCumlesi = ilacAdi != null && ilacAdi.isNotEmpty
+      ? '$ilacAdi. '
+      : adListedeYok && ilac != null
+      ? 'İlaç karekodu okundu ama ilacın adı listede yok. '
+      : '';
   if (ilac != null) {
     final skt = ilac.sonKullanma;
     if (skt == null) {
-      return 'İlaç karekodu okundu. Son kullanma tarihi bulunamadı.';
+      final okundu = adCumlesi.startsWith('İlaç karekodu okundu')
+          ? ''
+          : 'İlaç karekodu okundu. ';
+      return '$adCumlesi${okundu}Son kullanma tarihi bulunamadı.';
     }
-    final simdi = bugun ?? DateTime.now();
-    final bugunTarih = DateTime(simdi.year, simdi.month, simdi.day);
     final metin = 'Son kullanma tarihi ${ayYilYaz(skt)}.';
-    if (skt.isBefore(bugunTarih)) {
-      return 'Dikkat! Bu ilacın son kullanma tarihi geçmiş. $metin';
+    if (tarihiGecmisMi(skt, bugun: bugun)) {
+      return '${adCumlesi}Dikkat! Bu ilacın son kullanma tarihi geçmiş. $metin';
     }
-    return metin;
+    return '$adCumlesi$metin';
   }
 
   final temiz = ham.replaceAll(gs, ' ').trim();
   if (temiz.isEmpty) return 'Kod okundu ama içi boş.';
+  // İlaç kutusundaki normal barkod listede bulunduysa adını söyle.
+  if (adCumlesi.isNotEmpty) return '${adCumlesi}Barkod okundu.';
   // Sadece rakamdan oluşan barkodları tek tek okut ki anlaşılır olsun.
   if (_rakamMi(temiz)) return 'Barkod okundu: ${temiz.split('').join(' ')}';
   return 'Kod okundu: $temiz';
+}
+
+/// Son kullanma tarihi bugünden önce mi?
+bool tarihiGecmisMi(DateTime skt, {DateTime? bugun}) {
+  final simdi = bugun ?? DateTime.now();
+  return skt.isBefore(DateTime(simdi.year, simdi.month, simdi.day));
+}
+
+/// Normal barkod (yalnızca rakam) ise onu, değilse `null` döner.
+String? rakamliBarkod(String ham) {
+  final temiz = ham.trim();
+  return _rakamMi(temiz) && temiz.length >= 8 ? temiz : null;
 }

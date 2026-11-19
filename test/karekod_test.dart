@@ -54,4 +54,20 @@ void main() {
     );
     expect(sesliMetinHazirla('merhaba', bugun: bugun), 'Kod okundu: merhaba');
   });
+
+  test('İlaç adı bulunduysa cümlenin başında söylenir', () {
+    const ham =
+        '0108699504090128'
+        '21ABC$gs'
+        '17270331'
+        '10L1';
+    expect(
+      sesliMetinHazirla(ham, bugun: bugun, ilacAdi: 'parol 500 miligram'),
+      'parol 500 miligram. Son kullanma tarihi Mart 2027.',
+    );
+    expect(
+      sesliMetinHazirla('8699536090115', bugun: bugun, ilacAdi: 'majezik'),
+      'majezik. Barkod okundu.',
+    );
+  });
 }
