@@ -19,6 +19,12 @@ const String erteleEylemi = 'ertele';
 /// Her hatırlatma için bildirim numaraları: id*10 + tür.
 const int _anaBildirim = 0;
 const int _ertelemeBildirimi = 5;
+
+/// Son kullanma uyarıları: 30 gün önce, 7 gün önce, tarih geçince.
+const List<int> _sktBildirimleri = [6, 7, 8];
+
+/// Son kullanma uyarı bildirimini hatırlatma bildiriminden ayıran yük türü.
+const String sktBildirimTuru = 'skt';
 int _bildirimNo(Hatirlatma h, int tur) => h.id * 10 + tur;
 
 /// Bildirim düğmesine uygulama kapalıyken basılınca Android bu fonksiyonu
@@ -120,7 +126,34 @@ class HatirlatmaServisi {
     ),
   );
 
-  static String _yuk(Hatirlatma h) => jsonEncode({'id': h.id});
+  static String _yuk(Hatirlatma h, {String? tur}) =>
+      jsonEncode({'id': h.id, 'tur': ?tur});
+
+  /// Bildirim bir son kullanma uyarısı mı?
+  static bool sktBildirimiMi(String? yuk) {
+    if (yuk == null || yuk.isEmpty) return false;
+    try {
+      return (jsonDecode(yuk) as Map<String, dynamic>)['tur'] ==
+          sktBildirimTuru;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Son kullanma uyarıları ayrı bir kanalda, düğmesiz gönderilir.
+  NotificationDetails _sktAyrinti() => const NotificationDetails(
+    android: AndroidNotificationDetails(
+      'son_kullanma',
+      'Son kullanma uyarıları',
+      channelDescription:
+          'Hatırlatması kurulu ilacın son kullanma tarihi yaklaşınca ya da '
+          'geçince haber verir.',
+      importance: Importance.high,
+      priority: Priority.high,
+      visibility: NotificationVisibility.public,
+      icon: 'ic_bildirim',
+    ),
+  );
 
   /// Bildirimden gelen yükten hatırlatma numarasını okur.
   static int? yuktenId(String? yuk) {
@@ -170,6 +203,43 @@ class HatirlatmaServisi {
         payload: _yuk(h),
       );
     }
+    await _sktUyarilariniKur(h, simdi, kip);
+  }
+
+  /// Kayıtlı kutunun son kullanma tarihinden 30 ve 7 gün önce ve tarih
+  /// geçince birer kez bildirim kurar. Uygulama kapalı olsa da gelir.
+  Future<void> _sktUyarilariniKur(
+    Hatirlatma h,
+    tz.TZDateTime simdi,
+    AndroidScheduleMode kip,
+  ) async {
+    for (final tur in _sktBildirimleri) {
+      await _eklenti.cancel(id: _bildirimNo(h, tur));
+    }
+    final skt = h.sonKullanma;
+    if (skt == null) return;
+    final zamanlar = sktUyariZamanlari(simdi, skt);
+    for (final z in zamanlar) {
+      final metin = h.sktCumlesi(bugun: z.zaman);
+      if (metin == null) continue;
+      await _eklenti.zonedSchedule(
+        id: _bildirimNo(h, _sktBildirimleri[_sktSirasi(z.kalanGun)]),
+        title: z.kalanGun < 0
+            ? 'Son kullanma tarihi geçti'
+            : 'Son kullanma tarihi yaklaşıyor',
+        body: '$metin Yeni kutu aldıysanız karekodunu okutun.',
+        scheduledDate: z.zaman,
+        notificationDetails: _sktAyrinti(),
+        androidScheduleMode: kip,
+        payload: _yuk(h, tur: sktBildirimTuru),
+      );
+    }
+  }
+
+  /// Uyarı gününe göre bildirim numarası sırası (30 → 0, 7 → 1, geçti → 2).
+  static int _sktSirasi(int kalanGun) {
+    final i = sktOncesiUyariGunleri.indexOf(kalanGun);
+    return i >= 0 ? i : _sktBildirimleri.length - 1;
   }
 
   Future<void> iptal(Hatirlatma h) async {
@@ -177,6 +247,7 @@ class HatirlatmaServisi {
       _anaBildirim,
       for (var i = 1; i <= tekrarDakikalari.length; i++) i,
       _ertelemeBildirimi,
+      ..._sktBildirimleri,
     ]) {
       await _eklenti.cancel(id: _bildirimNo(h, tur));
     }

@@ -112,6 +112,7 @@ düğmesine basın) ve şunlardan birini söyleyin. TalkBack açıksa aşağıda
 | “ajandamı oku” | Kurulu hatırlatmaları saat sırasıyla okur |
 | “dokuzdaki hatırlatmayı sil” | Onay alarak o saatteki hatırlatmayı siler |
 | “aldım” | İlacı aldığınızı kaydeder, bekleyen tekrarları iptal eder |
+| “bugün ilacımı aldım mı” | Bugünkü “aldım” kayıtlarını hatırlatmalarla birlikte söyler |
 | “ertele” | Şu anki hatırlatmayı 10 dakika erteler |
 | “her gün saat dokuzda hatırlat” | Son okutulan ilaç için hatırlatma kurar |
 | “kamera izni” | Kamera iznini yeniden ister |
@@ -121,6 +122,14 @@ düğmesine basın) ve şunlardan birini söyleyin. TalkBack açıksa aşağıda
 
 **Sözünü kesme:** Uygulama uzun bir cümle söylerken konuşmaya başlarsanız
 (örneğin “feneri aç”), uygulama susar ve söylediğinizi yapar.
+
+### Son kullanma tarihi yaklaşıyor uyarısı
+
+- Kutu okutulunca tarihe 30 gün ya da daha az kaldıysa: “Dikkat, son
+  kullanma tarihine 16 gün kaldı.”
+- Hatırlatması kurulu ilacın kutusundaki tarih saklanır; tarihten 30 ve 7 gün
+  önce ve tarih geçince saat 10:00'da (uygulama kapalı olsa da) bildirim
+  gelir. Aynı ilacın yeni kutusu okutulunca tarih kendiliğinden güncellenir.
 
 ### İlacın adı ve doğru ilaç kontrolü
 

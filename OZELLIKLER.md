@@ -5,7 +5,7 @@ engelli kullanıcılar için yazılmış, yalnızca Android'de çalışan ve tam
 Türkçe konuşan bir Flutter uygulamasıdır. Nasıl kurulup çalıştırılacağı
 `README.md` dosyasındadır.
 
-> Not: Uygulama şimdiye kadar otomatik testlerle (118 test) ve derlemeyle
+> Not: Uygulama şimdiye kadar otomatik testlerle (146 test) ve derlemeyle
 > kontrol edildi; gerçek bir telefonda henüz denenmedi. Telefonda denenmesi
 > gereken noktalar en sonda “Bilinen sınırlar” bölümünde.
 
@@ -45,6 +45,7 @@ numarası, `17` son kullanma tarihi, `10` parti numarası.
 | İlaç listede var | “**Coraspin 100 miligram.** Son kullanma tarihi Mart 2027.” |
 | İlaç listede yok | “İlaç karekodu okundu ama ilacın adı listede yok. Son kullanma tarihi Mart 2027.” |
 | Tarihi geçmiş | “… Dikkat! Bu ilacın son kullanma tarihi geçmiş. Son kullanma tarihi Ocak 2025.” |
+| Tarihe 30 gün ya da daha az kalmış | “… Son kullanma tarihi Aralık 2026. **Dikkat, son kullanma tarihine 16 gün kaldı.**” (son gün: “Dikkat, bugün son kullanma tarihinin son günü.”) |
 | Karekodda tarih yok | “İlaç karekodu okundu. Son kullanma tarihi bulunamadı.” |
 
 Karekod okumada şunlar da ele alınır:
@@ -134,6 +135,7 @@ fazla 8 saniye dinlenir; 3 saniye sessizlik olunca dinleme biter.
 | “dokuzdaki hatırlatmayı sil” | Onay alarak siler |
 | “her gün saat dokuzda hatırlat” | Son okutulan ilaç için hatırlatma kurar |
 | “aldım”, “ilacımı içtim” | Alındığını kaydeder, bekleyen tekrarları iptal eder |
+| “bugün ilacımı aldım mı”, “ilacımı içtim mi”, “bugün neleri aldım” | Bugünkü “aldım” kayıtlarını hatırlatmalarla birlikte söyler |
 | “ertele” | Şu anki hatırlatmayı 10 dakika erteler |
 | “bip sesini kapat” / “bip sesini aç” | Bip yönlendirmesini kapatır / açar |
 | “kamera izni” | Kamera iznini yeniden ister |
@@ -213,6 +215,8 @@ Aynı ilaç için aynı saatte ikinci hatırlatma kurulmaz.
 - Bildirime dokununca uygulama açılır, hatırlatmayı söyler ve “Aldıysanız
   aldım, sonra hatırlatmamı isterseniz ertele deyin.” diyerek sizi dinler.
 - **Telefon yeniden başlatılsa** da hatırlatmalar yeniden kurulur.
+- Kutunun son kullanma tarihi yaklaştıysa ya da geçtiyse, bildirime
+  dokununca hatırlatmadan sonra bu da söylenir.
 
 ---
 
@@ -228,7 +232,47 @@ Karşılaştırma karekoddaki ürün numarasıyla (GTIN) yapılır.
 
 ---
 
-## 10. Ajanda
+## 10. “Bugün ilacımı aldım mı?”
+
+İlacı iki kez almamak ya da unutmamak için uygulamaya sorabilirsiniz:
+“bugün ilacımı aldım mı”, “ilacımı içtim mi”, “bugün neleri aldım”, “ilaç
+geçmişim”. Uygulama bugünkü “aldım” kayıtlarını hatırlatmalarla
+karşılaştırıp her ilaç için söyler:
+
+> “Bugünkü kayıtlarınız. sabah 09:00 Coraspin 100 miligram: aldınız, saat
+> 09:05'te. akşam 20:00 Majezik 100 miligram: saati henüz gelmedi.”
+
+- Saati geçmiş ama kaydı olmayan ilaç için: “aldım kaydı yok.”
+- Hatırlatma dışında söylenen “aldım”lar da sayılır: “Ayrıca bugün
+  hatırlatma dışında 1 aldım kaydı var: saat 12:30'da.”
+- Hiç kayıt yoksa: “Bugün için aldım kaydı yok.”
+- Kayıtlar hem uygulamada “aldım” demekten hem de bildirimdeki “Aldım”
+  düğmesinden gelir.
+- Uygulama yalnızca kayıtları söyler; **ilacın alınıp alınmaması konusunda
+  öneri vermez.**
+
+---
+
+## 11. Son kullanma tarihi yaklaşıyor uyarısı
+
+- **Kutu okutulunca:** Tarihe 30 gün ya da daha az kaldıysa cümlenin sonunda
+  “Dikkat, son kullanma tarihine 16 gün kaldı.” denir.
+- **Hatırlatması kurulu ilaçlar için bildirim:** Hatırlatma kurulurken
+  kutunun karekodundaki son kullanma tarihi saklanır. Bu tarihten **30 gün
+  önce**, **7 gün önce** ve **tarih geçince (ertesi gün)** saat 10:00'da,
+  uygulama kapalı olsa bile bildirim gelir: “Dikkat, Coraspin 100 miligram
+  için kayıtlı kutunun son kullanma tarihine 30 gün kaldı (31 Mart 2027).
+  Yeni kutu aldıysanız karekodunu okutun.” Bu bildirimler ayrı bir kanaldan
+  (“Son kullanma uyarıları”) ve düğmesiz gelir; dokununca uyarı sesle okunur.
+- **Yeni kutu:** Aynı ilacın yeni kutusu okutulunca saklanan tarih
+  kendiliğinden yeni kutunun tarihiyle değişir ve uyarılar ona göre yeniden
+  kurulur.
+- **Ajanda okunurken** tarihi yaklaşan ya da geçen kutular için sonda uyarı
+  söylenir.
+
+---
+
+## 12. Ajanda
 
 - Hatırlatmalar telefonda kalıcı saklanır; uygulama kapanıp açılınca kaybolmaz.
 - **“ajandamı oku”**: “2 hatırlatmanız var. sabah 09:00'da Coraspin 100
@@ -245,7 +289,7 @@ Karşılaştırma karekoddaki ürün numarasıyla (GTIN) yapılır.
 
 ---
 
-## 11. TalkBack ve erişilebilirlik
+## 13. TalkBack ve erişilebilirlik
 
 - **Ses çakışması yok:** TalkBack açıksa uygulama kendi sesini kullanmaz, her
   şeyi TalkBack üzerinden söyler. TalkBack kapalıysa kendi Türkçe sesiyle
@@ -266,7 +310,7 @@ Karşılaştırma karekoddaki ürün numarasıyla (GTIN) yapılır.
 
 ---
 
-## 12. Ekrandaki düğmeler
+## 14. Ekrandaki düğmeler
 
 | Düğme | Ne yapar |
 | --- | --- |
@@ -279,7 +323,7 @@ Karşılaştırma karekoddaki ürün numarasıyla (GTIN) yapılır.
 
 ---
 
-## 13. Gizlilik ve internet
+## 15. Gizlilik ve internet
 
 - İlaç listesi, yazı tanıma, hatırlatmalar ve ajanda **telefonun içinde**
   çalışır; bu bilgiler hiçbir yere gönderilmez.
@@ -289,6 +333,13 @@ Karşılaştırma karekoddaki ürün numarasıyla (GTIN) yapılır.
 ---
 
 ## Bilinen sınırlar (gerçek telefonda denenmeli)
+
+- **“Aldım mı?” sorusu:** Konuşma tanıma sondaki “mı”yı duymazsa cümle
+  “aldım” sayılıp kayıt eklenebilir. Uygulama “Kaydedildi” diyeceği için
+  fark edilir; yine de denenmeli.
+- **Son kullanma tarihi en son okutulan kutudan gelir:** Evde aynı ilacın
+  farklı tarihli iki kutusu varsa, en son hangisi okutulduysa onun tarihi
+  saklanır.
 
 - **Bip seyrek çalabilir:** Google'ın kod okuyucusu çoğu zaman yalnızca tam
   okuyabildiği kodları bildirir; “görüp okuyamadığı” kod durumu az oluşabilir.

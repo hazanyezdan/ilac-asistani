@@ -6,6 +6,7 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'ilac_veritabani.dart';
+import 'karekod.dart';
 import 'saat_ayristir.dart';
 import 'turkce.dart';
 
@@ -19,6 +20,7 @@ class Hatirlatma {
     this.ilacAdi,
     this.sonAlim,
     this.sonErteleme,
+    this.sonKullanma,
   });
 
   factory Hatirlatma.jsondan(Map<String, dynamic> j) => Hatirlatma(
@@ -29,6 +31,7 @@ class Hatirlatma {
     ilacAdi: j['ilacAdi'] as String?,
     sonAlim: _tarih(j['sonAlim']),
     sonErteleme: _tarih(j['sonErteleme']),
+    sonKullanma: _tarih(j['sonKullanma']),
   );
 
   final int id;
@@ -47,9 +50,12 @@ class Hatirlatma {
   /// "Ertele" denilen son zaman.
   final DateTime? sonErteleme;
 
+  /// Son okutulan kutunun karekodundaki son kullanma tarihi. Aynı ilacın
+  /// yeni kutusu okutulunca güncellenir.
+  final DateTime? sonKullanma;
+
   String get saatYazisi => saatMetni(saat, dakika);
 
-  /// Sesli okunacak ad: "parol 500 miligram" ya da "ilacınız".
   /// Sesli okunacak kısa ad: "Coraspin 100 miligram" ya da "ilacınız".
   String get okunacakAd => ilacAdi == null ? 'ilacınız' : kisaAd(ilacAdi!);
 
@@ -58,7 +64,24 @@ class Hatirlatma {
       'Saat $saatYazisi. '
       '${ilacAdi == null ? 'İlacınızı' : kisaAd(ilacAdi!)} alma zamanı.';
 
-  Hatirlatma kopyala({DateTime? sonAlim, DateTime? sonErteleme}) => Hatirlatma(
+  /// Kayıtlı kutunun son kullanma tarihi geçtiyse ya da [sktUyariEsigi]
+  /// günden az kaldıysa uyarı cümlesi; değilse `null`.
+  String? sktCumlesi({DateTime? bugun}) {
+    final skt = sonKullanma;
+    if (skt == null) return null;
+    final kalan = sktKalanGun(skt, bugun: bugun);
+    if (kalan > sktUyariEsigi) return null;
+    final bas = 'Dikkat, $okunacakAd için kayıtlı kutunun son kullanma tarihi';
+    if (kalan < 0) return '$bas geçmiş (${gunAyYilYaz(skt)}).';
+    if (kalan == 0) return '$bas bugün.';
+    return '${bas}ne $kalan gün kaldı (${gunAyYilYaz(skt)}).';
+  }
+
+  Hatirlatma kopyala({
+    DateTime? sonAlim,
+    DateTime? sonErteleme,
+    DateTime? sonKullanma,
+  }) => Hatirlatma(
     id: id,
     saat: saat,
     dakika: dakika,
@@ -66,6 +89,7 @@ class Hatirlatma {
     ilacAdi: ilacAdi,
     sonAlim: sonAlim ?? this.sonAlim,
     sonErteleme: sonErteleme ?? this.sonErteleme,
+    sonKullanma: sonKullanma ?? this.sonKullanma,
   );
 
   Map<String, dynamic> jsona() => {
@@ -76,6 +100,7 @@ class Hatirlatma {
     'ilacAdi': ilacAdi,
     'sonAlim': sonAlim?.toIso8601String(),
     'sonErteleme': sonErteleme?.toIso8601String(),
+    'sonKullanma': sonKullanma?.toIso8601String(),
   };
 
   static DateTime? _tarih(Object? deger) =>
@@ -113,16 +138,19 @@ class Ajanda {
   }
 
   /// Yeni hatırlatma ekler. Aynı ilaç için aynı saatte zaten varsa onu
-  /// döner ve `yeni` alanı `false` olur.
+  /// döner (son kullanma tarihini güncelleyerek) ve `yeni` alanı `false` olur.
   ({Hatirlatma hatirlatma, bool yeni}) ekle({
     required int saat,
     required int dakika,
     String? gtin,
     String? ilacAdi,
+    DateTime? sonKullanma,
   }) {
     for (final h in _liste) {
       if (h.saat == saat && h.dakika == dakika && h.gtin == gtin) {
-        return (hatirlatma: h, yeni: false);
+        final guncel = h.kopyala(sonKullanma: sonKullanma);
+        guncelle(guncel);
+        return (hatirlatma: guncel, yeni: false);
       }
     }
     final enBuyuk = _liste.fold<int>(0, (m, h) => h.id > m ? h.id : m);
@@ -132,6 +160,7 @@ class Ajanda {
       dakika: dakika,
       gtin: gtin,
       ilacAdi: ilacAdi,
+      sonKullanma: sonKullanma,
     );
     _liste.add(h);
     return (hatirlatma: h, yeni: true);
@@ -147,6 +176,20 @@ class Ajanda {
   void guncelle(Hatirlatma yeni) {
     final i = _liste.indexWhere((e) => e.id == yeni.id);
     if (i >= 0) _liste[i] = yeni;
+  }
+
+  /// Aynı ilacın (aynı GTIN) yeni bir kutusu okutulunca, o ilacın
+  /// hatırlatmalarındaki son kullanma tarihini günceller. Değişenleri döner.
+  List<Hatirlatma> sktGuncelle(String barkod, DateTime skt) {
+    final degisenler = <Hatirlatma>[];
+    for (final h in [..._liste]) {
+      if (IlacVeritabani.ayniUrun(h.gtin, barkod) && h.sonKullanma != skt) {
+        final guncel = h.kopyala(sonKullanma: skt);
+        guncelle(guncel);
+        degisenler.add(guncel);
+      }
+    }
+    return degisenler;
   }
 
   /// "dokuzdaki hatırlatmayı sil" için eşleşenleri bulur. Sabah/akşam
@@ -221,15 +264,70 @@ class Ajanda {
       : 'Dikkat, bu hatırlatılan ilaç değil. Şu an hatırlatılan: '
             '${k.hatirlatma.okunacakAd}.';
 
-  /// Ajandanın sesli okunacak metni.
-  String okunacakMetin() {
+  /// Ajandanın sesli okunacak metni. Son kullanma tarihi yaklaşan ya da
+  /// geçen kutular için sonda uyarı eklenir.
+  String okunacakMetin({DateTime? bugun}) {
     if (_liste.isEmpty) return 'Kurulu hatırlatmanız yok.';
     final parcalar = sirali.map(
       (h) =>
           '${gununBolumu(h.saat)} ${ekliSaatMetni(h.saat, h.dakika)} '
           '${h.okunacakAd}',
     );
-    return '${_liste.length} hatırlatmanız var. ${parcalar.join('. ')}.';
+    final uyarilar = {for (final h in sirali) ?h.sktCumlesi(bugun: bugun)}
+        .join(' ');
+    return '${_liste.length} hatırlatmanız var. ${parcalar.join('. ')}.'
+        '${uyarilar.isEmpty ? '' : ' $uyarilar'}';
+  }
+
+  /// "Bugün ilacımı aldım mı?" sorusunun cevabı. Yalnızca kayıtları
+  /// söyler; ilacın alınıp alınmaması konusunda öneri vermez.
+  ///
+  /// [kayitlar], [AjandaDeposu.alimKayitlari] biçimindedir: "zaman|id".
+  String bugunkuAlimOzeti(List<String> kayitlar, DateTime simdi) {
+    bool bugunMu(DateTime t) =>
+        t.year == simdi.year && t.month == simdi.month && t.day == simdi.day;
+
+    // Bugünkü kayıtlar: hatırlatma numarası → kayıt saatleri.
+    final hatirlatmaya = <int, List<DateTime>>{};
+    final digerleri = <DateTime>[];
+    for (final kayit in kayitlar) {
+      final parca = kayit.split('|');
+      final zaman = DateTime.tryParse(parca.first)?.toLocal();
+      if (zaman == null || !bugunMu(zaman)) continue;
+      final id = parca.length > 1 ? int.tryParse(parca[1]) : null;
+      if (id != null && bul(id) != null) {
+        (hatirlatmaya[id] ??= []).add(zaman);
+      } else {
+        digerleri.add(zaman);
+      }
+    }
+
+    String saatte(DateTime t) => ekliSaatMetni(t.hour, t.minute);
+    final cumleler = <String>[];
+    for (final h in sirali) {
+      final bas = '${gununBolumu(h.saat)} ${h.saatYazisi} ${h.okunacakAd}: ';
+      final alimlar = hatirlatmaya[h.id];
+      final saatGeldi =
+          simdi.hour * 60 + simdi.minute >= h.saat * 60 + h.dakika;
+      if (alimlar != null) {
+        cumleler.add('${bas}aldınız, saat ${saatte(alimlar.last)}.');
+      } else if (saatGeldi) {
+        cumleler.add('${bas}aldım kaydı yok.');
+      } else {
+        cumleler.add('${bas}saati henüz gelmedi.');
+      }
+    }
+    if (digerleri.isNotEmpty) {
+      final saatler = digerleri.map(saatte).join(', ');
+      cumleler.add(
+        _liste.isEmpty
+            ? 'Bugün ${digerleri.length} aldım kaydı var: saat $saatler.'
+            : 'Ayrıca bugün hatırlatma dışında ${digerleri.length} aldım '
+                  'kaydı var: saat $saatler.',
+      );
+    }
+    if (cumleler.isEmpty) return 'Bugün için aldım kaydı yok.';
+    return 'Bugünkü kayıtlarınız. ${cumleler.join(' ')}';
   }
 
   String jsona() => jsonEncode(_liste.map((h) => h.jsona()).toList());
