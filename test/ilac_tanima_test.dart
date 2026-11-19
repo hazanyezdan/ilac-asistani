@@ -4,10 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:ilac_asistani/ajanda.dart';
 import 'package:ilac_asistani/ilac_veritabani.dart';
 import 'package:ilac_asistani/karekod.dart';
-import 'package:ilac_asistani/komutlar.dart';
-import 'package:ilac_asistani/nfc_etiketleri.dart';
 import 'package:ilac_asistani/yazi_eslestirme.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 /// Uydurma örnek liste (gerçek değil).
 const _ornekListe =
@@ -242,61 +239,5 @@ void main() {
       expect(harfFarki('CORASPN', 'CORASPIN'), 1);
       expect(harfFarki('ABC', 'XYZQWE', sinir: 2), 3);
     });
-  });
-
-  group('NFC etiketleri', () {
-    test('etiket kimliği yazımı', () {
-      expect(etiketKimligi([0x04, 0xa2, 0x1b, 0xff]), '04:A2:1B:FF');
-      expect(etiketKimligi([]), '');
-    });
-
-    test('etiket ilaçla eşleşir, saklanır ve değiştirilebilir', () async {
-      SharedPreferences.setMockInitialValues({});
-      final depo = EtiketDeposu();
-      expect(await depo.bul('04:A2'), isNull);
-      await depo.eslestir(
-        '04:A2',
-        EtiketKaydi(
-          karekod: karekod('08690000000011'),
-          gtin: '08690000000011',
-          ilacAdi: 'ORNEKSPIRIN 100 MG 30 ENTERIK KAPLI TABLET',
-        ),
-      );
-      final kayit = (await EtiketDeposu().bul('04:A2'))!;
-      expect(kayit.gtin, '08690000000011');
-      // Etikete dokununca karekoddaki son kullanma tarihi söylenebilir.
-      expect(
-        sesliMetinHazirla(
-          kayit.karekod,
-          bugun: bugun,
-          ilacAdi: kisaAd(kayit.ilacAdi!),
-        ),
-        'Ornekspirin 100 miligram. Son kullanma tarihi Mart 2027.',
-      );
-      await depo.eslestir(
-        '04:A2',
-        EtiketKaydi(karekod: karekod('08690000000035')),
-      );
-      expect((await depo.bul('04:A2'))!.gtin, isNull);
-      expect(await depo.adet(), 1);
-    });
-
-    test('bozuk kayıt uygulamayı çökertmez', () async {
-      SharedPreferences.setMockInitialValues({'nfc_etiketleri': '[bozuk'});
-      expect(await EtiketDeposu().bul('x'), isNull);
-    });
-  });
-
-  test('Etiket eşleştir komutu', () {
-    for (final c in [
-      'etiket eşleştir',
-      'NFC etiketi eşleştir',
-      'etikete bağla',
-    ]) {
-      expect(komutuTani(c).tur, KomutTuru.etiketEslestir, reason: c);
-    }
-    // Eski komutlar bozulmaz.
-    expect(komutuTani('feneri aç').tur, KomutTuru.fenerAc);
-    expect(komutuTani('ajandamı oku').tur, KomutTuru.ajandaOku);
   });
 }

@@ -44,8 +44,6 @@ dependencies:
   permission_handler: ^13.0.2
   google_mlkit_text_recognition: ^1.0.3
   camera: ^0.12.2
-  nfc_manager: ^4.4.0
-
 dev_dependencies:
   flutter_test:
     sdk: flutter

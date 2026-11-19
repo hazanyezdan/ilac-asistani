@@ -7,8 +7,6 @@ Görme engelli kişiler için hazırlanmış, tamamen Türkçe bir Android uygul
   (“Coraspin 100 miligram. Son kullanma tarihi Mart 2027.”).
 - Hatırlatma saatinde kutu okutulursa **doğru ilaç mı** diye kontrol eder.
 - Karekod okunamazsa **kutunun yazısından** ilacı tahmin eder (“muhtemelen…”).
-- İsteğe bağlı: kutuya yapıştırılan **NFC etiketine** telefonu dokundurunca
-  kamera olmadan ilacı söyler.
 - Ardından **“Bu ilaç için hatırlatma kurmak ister misiniz?”** diye sorar ve
   cevabı **sesle** alır. Hiçbir düğme aramanız gerekmez.
 - Her gün aynı saatte **bildirimle hatırlatır**; “Aldım” denmezse 10 ve 20
@@ -118,7 +116,6 @@ düğmesine basın) ve şunlardan birini söyleyin. TalkBack açıksa aşağıda
 | “yardım” | Komutları sayar |
 | “sus” | Uygulamayı susturur |
 | “bip sesini kapat” / “bip sesini aç” | Bip ile yönlendirmeyi kapatır / açar (ayar kalıcıdır) |
-| “etiket eşleştir” | Son okutulan ilacı dokundurulacak NFC etiketine bağlar |
 
 **Sözünü kesme:** Uygulama uzun bir cümle söylerken konuşmaya başlarsanız
 (örneğin “feneri aç”), uygulama susar ve söylediğinizi yapar.
@@ -156,32 +153,6 @@ düğmesine basın) ve şunlardan birini söyleyin. TalkBack açıksa aşağıda
   tavsiye vermez**, yalnızca ürünün adını söyler.
 - En fazla iki kez denenir (10. ve 30. saniyede); bir kod okununca sayaç
   baştan başlar.
-
-### NFC etiketiyle hızlı tanıma (isteğe bağlı)
-
-1. İlacın karekodunu kameraya okutun.
-2. Ekrana iki kez dokunup **“etiket eşleştir”** deyin.
-3. “Telefonun arka yüzünü NFC etiketine dokundurun” deyince, kutuya
-   yapıştırdığınız etikete telefonun arkasını dokundurun (30 saniye içinde).
-4. “Etiket eşleştirildi” der. Artık uygulama açıkken telefonu o etikete
-   dokundurmanız yeterli: **kamera olmadan** ilacın adı ve son kullanma tarihi
-   söylenir (hatırlatma saatindeyse doğru ilaç kontrolü de yapılır).
-
-Notlar:
-- Etikete hiçbir şey yazılmaz; yalnızca etiketin değişmez kimliği okunup
-  telefonda “bu kimlik şu ilacın kutusu” diye saklanır. Bu yüzden ucuz,
-  yazılamayan etiketler de olur.
-- Son kullanma tarihi eşleştirme anındaki kutudan gelir. **Kutu değişince
-  etiketi yeni kutuyla yeniden eşleştirin.** Aynı etiketi yeniden eşleştirmek
-  eski kaydın yerine geçer.
-- Telefonda NFC yoksa ya da kapalıysa “etiket eşleştir” denince bu sesle
-  söylenir; uygulamanın geri kalanı etkilenmez.
-- Etiket yalnızca uygulama **açıkken** okunur.
-- **Hangi etiket?** NFC Forum uyumlu, 13,56 MHz, ISO 14443-A etiketler:
-  **NTAG213 / NTAG215 / NTAG216** yapışkanlı (sticker) etiketler en uygunu
-  ve en ucuzudur. Metal yüzeylere (alüminyum folyo) yapıştırılacaksa
-  **“metal üstü / anti-metal”** etiket seçin. 125 kHz (RFID/EM4100) etiketler
-  telefonla **okunmaz**.
 
 ### Bip sesiyle yönlendirme
 
@@ -235,7 +206,6 @@ Notlar:
 | `lib/ilac_veritabani.dart` | Barkoddan ilaç adını bulur; kısa ve sesli okunacak ad (“CORASPIN 100 MG 30 ENTERIK…” → “Coraspin 100 miligram”); marka indeksi. |
 | `lib/yazi_eslestirme.dart` | Kutu yazısını (OCR metni) ilaç listesindeki markalarla eşleştiren saf Dart kodu. |
 | `lib/yazi_okuyucu.dart` | Fotoğraf çekip yazıyı cihaz üzerinde okur (`camera`, `google_mlkit_text_recognition`). |
-| `lib/nfc_etiketleri.dart` | NFC etiket kimliği ↔ ilaç eşleşmelerini saklar (`nfc_manager`, `shared_preferences`). |
 | `lib/karekod.dart` | İlaç karekodunu çözer, son kullanma tarihini Türkçe cümleye çevirir. |
 | `lib/turkce.dart` | Türkçe küçük harf, kelimelere bölme, “09:00'da / 20:00'de” ekleri. |
 | `assets/ilaclar.tsv` | ~18 bin ilacın barkodu ve adı (TİTCK listesinden). |
@@ -301,8 +271,6 @@ güncellemede betik dosyayı baştan yazar.
 - `SCHEDULE_EXACT_ALARM`: hatırlatmanın tam saatinde gelmesi (Android 12+).
 - `RECEIVE_BOOT_COMPLETED`: telefon yeniden başlayınca hatırlatmaları
   yeniden kurmak.
-- `NFC` (isteğe bağlı, `android.hardware.nfc` zorunlu değil): etiketle
-  tanıma. NFC'siz telefonlara da kurulur.
 - `TTS_SERVICE` ve `RecognitionService` sorguları: Android 11+ telefonlarda
   metin okuma ve konuşma tanıma hizmetlerini bulabilmek.
 - `flutter_local_notifications` alıcıları: zamanlanmış bildirimler, yeniden
