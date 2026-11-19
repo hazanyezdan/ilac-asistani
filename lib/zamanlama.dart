@@ -50,3 +50,31 @@ bool bugunYapildiMi(DateTime? olay, Hatirlatma h, tz.TZDateTime simdi) {
   final bugun = bugunkuZaman(simdi, h.saat, h.dakika);
   return olay.isAfter(bugun.subtract(const Duration(hours: 1)));
 }
+
+/// Son kullanma tarihinden kaç gün önce bildirim gönderilir.
+const List<int> sktOncesiUyariGunleri = [30, 7];
+
+/// Son kullanma uyarı bildirimleri saat kaçta gelir.
+const int sktUyariSaati = 10;
+
+/// Son kullanma tarihi uyarılarının zamanları: tarihten 30 ve 7 gün önce
+/// ve tarihin ertesi günü, saat 10:00'da. Geçmişte kalanlar atlanır.
+/// Her biri (kaç gün kaldığı, zamanı) olarak döner; tarih geçtiyse gün eksidir.
+List<({int kalanGun, tz.TZDateTime zaman})> sktUyariZamanlari(
+  tz.TZDateTime simdi,
+  DateTime skt,
+) {
+  final sonuc = <({int kalanGun, tz.TZDateTime zaman})>[];
+  for (final gun in [...sktOncesiUyariGunleri, -1]) {
+    final tarih = DateTime(skt.year, skt.month, skt.day - gun);
+    final zaman = tz.TZDateTime(
+      simdi.location,
+      tarih.year,
+      tarih.month,
+      tarih.day,
+      sktUyariSaati,
+    );
+    if (zaman.isAfter(simdi)) sonuc.add((kalanGun: gun, zaman: zaman));
+  }
+  return sonuc;
+}

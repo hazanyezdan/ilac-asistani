@@ -51,7 +51,8 @@ class IlacAsistaniApp extends StatelessWidget {
 }
 
 /// Son okunan ilaç: hatırlatma kurarken kullanılır.
-typedef OkunanIlac = ({String gtin, String? ad});
+/// [skt]: karekoddaki son kullanma tarihi (varsa).
+typedef OkunanIlac = ({String gtin, String? ad, DateTime? skt});
 
 class TaramaEkrani extends StatefulWidget {
   const TaramaEkrani({super.key});
@@ -73,7 +74,8 @@ class _TaramaEkraniState extends State<TaramaEkrani>
       'kamerayı açabilirsiniz.';
   static const _yardimMetni =
       'Şunları söyleyebilirsiniz: tekrar söyle. Feneri aç. Feneri kapat. '
-      'Ajandamı oku. Dokuzdaki hatırlatmayı sil. Aldım. Ertele. Sus. '
+      'Ajandamı oku. Dokuzdaki hatırlatmayı sil. Aldım. Ertele. '
+      'Bugün ilacımı aldım mı. Sus. '
       'Bip sesini kapat. Bip sesini aç. '
       'Bir ilaç okuttuktan sonra, her gün saat dokuzda hatırlat da '
       'diyebilirsiniz.';
@@ -501,7 +503,23 @@ class _TaramaEkraniState extends State<TaramaEkrani>
     final barkod = ilac?.gtin ?? rakamliBarkod(ham);
     final ad = _ilaclar.ad(barkod);
     if (barkod != null && (ilac != null || ad != null)) {
-      _sonOkunanIlac = (gtin: barkod, ad: ad);
+      _sonOkunanIlac = (gtin: barkod, ad: ad, skt: ilac?.sonKullanma);
+    }
+    // Hatırlatması kurulu bir ilacın yeni kutusu okutulduysa, son kullanma
+    // uyarıları yeni kutunun tarihine göre kurulsun.
+    final skt = ilac?.sonKullanma;
+    if (barkod != null && skt != null) {
+      final degisenler = _ajanda.sktGuncelle(barkod, skt);
+      if (degisenler.isNotEmpty) {
+        await _depo.kaydet(_ajanda);
+        for (final h in degisenler) {
+          try {
+            await _servis.kur(h);
+          } catch (e) {
+            debugPrint('Son kullanma uyarısı kurulamadı: $e');
+          }
+        }
+      }
     }
 
     var metin = sesliMetinHazirla(
@@ -716,6 +734,7 @@ class _TaramaEkraniState extends State<TaramaEkrani>
       dakika: saat.dakika,
       gtin: ilac.gtin,
       ilacAdi: ilac.ad,
+      sonKullanma: ilac.skt,
     );
     await _depo.kaydet(_ajanda);
     try {
@@ -833,11 +852,23 @@ class _TaramaEkraniState extends State<TaramaEkrani>
     await _ajandayiTazele();
     final h = id == null ? null : _ajanda.bul(id);
     if (h == null) return;
+    // Son kullanma uyarısına dokunulduysa yalnızca uyarıyı söyle.
+    if (HatirlatmaServisi.sktBildirimiMi(yanit.payload)) {
+      await _mesgulken(
+        () => _konus(
+          h.sktCumlesi() ??
+              '${h.okunacakAd} için kayıtlı kutunun son kullanma tarihi '
+                  'artık yakın değil.',
+        ),
+      );
+      return;
+    }
     _sonBildirimId = h.id;
     _sonBildirimZamani = DateTime.now();
     await _mesgulken(() async {
+      final skt = h.sktCumlesi();
       final cevap = await _sorVeDinle(
-        '${h.almaZamaniCumlesi} '
+        '${h.almaZamaniCumlesi} ${skt ?? ''} '
         '${_mikrofonVar ? 'Aldıysanız aldım, sonra hatırlatmamı isterseniz ertele deyin.' : ''}',
       );
       if (cevap != null) await _komutIsle(cevap);
@@ -889,6 +920,10 @@ class _TaramaEkraniState extends State<TaramaEkrani>
         await _silAkisi(komut.saat);
       case KomutTuru.aldim:
         await _aldimSesle();
+      case KomutTuru.alimSorgula:
+        await _ajandayiTazele();
+        final kayitlar = await _depo.alimKayitlari();
+        await _konus(_ajanda.bugunkuAlimOzeti(kayitlar, DateTime.now()));
       case KomutTuru.ertele:
         await _erteleSesle();
       case KomutTuru.kameraIzni:

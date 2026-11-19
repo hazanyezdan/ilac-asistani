@@ -12,6 +12,7 @@ enum KomutTuru {
   hatirlatmaKur,
   hatirlatmaSil,
   aldim,
+  alimSorgula,
   ertele,
   kameraIzni,
   yardim,
@@ -79,6 +80,27 @@ Yanit yanitiAnla(String cumle) {
 bool _baslayan(List<String> k, List<String> onekler) =>
     k.any((kelime) => onekler.any(kelime.startsWith));
 
+const Set<String> _soruEkleri = {'mı', 'mi', 'mu', 'mü', 'mıyım', 'miyim'};
+const List<String> _almaFiilleri = ['aldım', 'aldim', 'içtim', 'ictim'];
+
+/// "Bugün ilacımı aldım mı?", "ilacımı içtim mi", "bugün neleri aldım",
+/// "ilaç geçmişim" gibi soruları tanır.
+bool alimSorusuMu(List<String> k) {
+  final almaFiili = _baslayan(k, _almaFiilleri);
+  // "aldım mı" ya da bitişik yazılmış "aldımmı".
+  final soruEki =
+      k.any(_soruEkleri.contains) ||
+      k.any(
+        (w) =>
+            _almaFiilleri.any(w.startsWith) &&
+            _soruEkleri.any((e) => w.endsWith(e) && w.length > e.length + 3),
+      );
+  if (almaFiili && soruEki) return true;
+  final soruKelimesi = _baslayan(k, ['ne', 'hangi', 'kaç']);
+  if (almaFiili && soruKelimesi) return true;
+  return _baslayan(k, ['geçmiş']) && _baslayan(k, ['ilaç', 'alım', 'alim']);
+}
+
 /// Cümleyi bir komuta çevirir.
 Komut komutuTani(String cumle) {
   final k = kelimeler(cumle);
@@ -89,6 +111,8 @@ Komut komutuTani(String cumle) {
   if (_baslayan(k, ['sil']) || (k.contains('iptal') && hatirlatmaGeciyor)) {
     return Komut(KomutTuru.hatirlatmaSil, saat: saat);
   }
+  // "Bugün ilacımı aldım mı?" soru olduğu için "aldım" kaydından önce denenir.
+  if (alimSorusuMu(k)) return const Komut(KomutTuru.alimSorgula);
   if (_baslayan(k, ['aldım', 'aldim', 'içtim', 'ictim'])) {
     return const Komut(KomutTuru.aldim);
   }

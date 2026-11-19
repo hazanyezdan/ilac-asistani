@@ -166,6 +166,33 @@ DateTime? tarihCoz(String yyaagg) {
 /// Tarihi "Mart 2027" biçiminde Türkçe yazar.
 String ayYilYaz(DateTime tarih) => '${_aylar[tarih.month - 1]} ${tarih.year}';
 
+/// Tarihi "31 Mart 2027" biçiminde Türkçe yazar.
+String gunAyYilYaz(DateTime tarih) => '${tarih.day} ${ayYilYaz(tarih)}';
+
+/// Son kullanma tarihi yaklaşıyor uyarısı kaç gün kala başlar.
+const int sktUyariEsigi = 30;
+
+/// Son kullanma tarihine kalan gün sayısı (bugün son günse 0, geçtiyse eksi).
+int sktKalanGun(DateTime skt, {DateTime? bugun}) {
+  final simdi = bugun ?? DateTime.now();
+  // Saat farkları ve yaz saati sayıyı bozmasın diye yalnızca tarihler
+  // UTC olarak karşılaştırılır.
+  return DateTime.utc(
+    skt.year,
+    skt.month,
+    skt.day,
+  ).difference(DateTime.utc(simdi.year, simdi.month, simdi.day)).inDays;
+}
+
+/// Son kullanma tarihine [sktUyariEsigi] gün ya da daha az kaldıysa uyarı
+/// cümlesi; değilse (ya da tarih geçtiyse) `null`.
+String? sktYaklasiyorUyarisi(DateTime skt, {DateTime? bugun}) {
+  final kalan = sktKalanGun(skt, bugun: bugun);
+  if (kalan < 0 || kalan > sktUyariEsigi) return null;
+  if (kalan == 0) return 'Dikkat, bugün son kullanma tarihinin son günü.';
+  return 'Dikkat, son kullanma tarihine $kalan gün kaldı.';
+}
+
 /// Okunan kod için sesli söylenecek Türkçe metni hazırlar.
 ///
 /// [ilacAdi] verilirse (TİTCK listesinde bulunduysa) cümlenin başında
@@ -195,7 +222,8 @@ String sesliMetinHazirla(
     if (tarihiGecmisMi(skt, bugun: bugun)) {
       return '${adCumlesi}Dikkat! Bu ilacın son kullanma tarihi geçmiş. $metin';
     }
-    return '$adCumlesi$metin';
+    final uyari = sktYaklasiyorUyarisi(skt, bugun: bugun);
+    return '$adCumlesi$metin${uyari == null ? '' : ' $uyari'}';
   }
 
   final temiz = ham.replaceAll(gs, ' ').trim();
