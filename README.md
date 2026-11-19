@@ -4,7 +4,11 @@ Görme engelli kişiler için hazırlanmış, tamamen Türkçe bir Android uygul
 
 - Kamerayı ilaç kutusuna tutunca karekodu ya da barkodu okur, telefonu titretir
   ve **ilacın adını ve son kullanma tarihini sesli söyler**
-  (“Majezik 100 miligram 15 film tablet. Son kullanma tarihi Mart 2027.”).
+  (“Coraspin 100 miligram. Son kullanma tarihi Mart 2027.”).
+- Hatırlatma saatinde kutu okutulursa **doğru ilaç mı** diye kontrol eder.
+- Karekod okunamazsa **kutunun yazısından** ilacı tahmin eder (“muhtemelen…”).
+- İsteğe bağlı: kutuya yapıştırılan **NFC etiketine** telefonu dokundurunca
+  kamera olmadan ilacı söyler.
 - Ardından **“Bu ilaç için hatırlatma kurmak ister misiniz?”** diye sorar ve
   cevabı **sesle** alır. Hiçbir düğme aramanız gerekmez.
 - Her gün aynı saatte **bildirimle hatırlatır**; “Aldım” denmezse 10 ve 20
@@ -114,9 +118,70 @@ düğmesine basın) ve şunlardan birini söyleyin. TalkBack açıksa aşağıda
 | “yardım” | Komutları sayar |
 | “sus” | Uygulamayı susturur |
 | “bip sesini kapat” / “bip sesini aç” | Bip ile yönlendirmeyi kapatır / açar (ayar kalıcıdır) |
+| “etiket eşleştir” | Son okutulan ilacı dokundurulacak NFC etiketine bağlar |
 
 **Sözünü kesme:** Uygulama uzun bir cümle söylerken konuşmaya başlarsanız
 (örneğin “feneri aç”), uygulama susar ve söylediğinizi yapar.
+
+### İlacın adı ve doğru ilaç kontrolü
+
+- Karekoddaki ürün numarası (GTIN) uygulamanın içindeki ilaç listesiyle
+  eşleştirilir ve ilacın **kısa adı** söylenir: “Coraspin 100 miligram. Son
+  kullanma tarihi Mart 2027.” (Paket bilgisi, ör. “30 enterik kaplı tablet”,
+  söylenmez.)
+- Listede yoksa: “İlaç karekodu okundu ama ilacın adı listede yok.” ve son
+  kullanma tarihi söylenir.
+- Hatırlatmalar, bildirimler ve ajanda ilaç adıyla konuşur:
+  “Saat 09:00. Coraspin 100 miligram alma zamanı.”
+- **Hatırlatma saatinde** (saatin 1 saat öncesinden 2 saat sonrasına kadar ya
+  da bildirime dokunduktan sonraki 2 saat içinde) bir kutu okutulursa:
+  - doğru kutuysa **“Evet, doğru ilaç.”**
+  - başka bir kutuysa **“Dikkat, bu hatırlatılan ilaç değil. Şu an
+    hatırlatılan: Coraspin 100 miligram.”**
+
+### Karekod okunamazsa: kutunun yazısından tahmin
+
+- Kamera açıkken **10 saniye** boyunca hiçbir kod okunamazsa uygulama
+  tarayıcıyı bir an durdurur, kutunun fotoğrafını çeker ve üzerindeki yazıyı
+  **telefonun içinde, internetsiz** okur (`google_mlkit_text_recognition`).
+- Okunan yazıyı ilaç listesindeki marka adlarıyla karşılaştırır; yazı tanıma
+  hatalarına (ör. “0” yerine “O”, bir harf eksik) biraz tolerans gösterir.
+  Kutuda doz yazıyorsa (“100 mg”) o dozdaki ürünü seçer.
+- Bir eşleşme bulursa **mutlaka “muhtemelen” diyerek** söyler: “Karekod
+  bulunamadı, kutunun yazısından okuyorum: muhtemelen Coraspin 100 miligram.
+  Bu tahmin kesin değil, mümkünse karekodu okutun.”
+- Emin olamazsa (hiç ya da iki farklı eşit aday) **hiçbir şey söylemez**.
+- Bu tahmin ile hatırlatma kurulmaz ve doğru ilaç kontrolü yapılmaz; bunlar
+  için karekod gerekir. Uygulama **hiçbir zaman doz önerisi ya da tıbbi
+  tavsiye vermez**, yalnızca ürünün adını söyler.
+- En fazla iki kez denenir (10. ve 30. saniyede); bir kod okununca sayaç
+  baştan başlar.
+
+### NFC etiketiyle hızlı tanıma (isteğe bağlı)
+
+1. İlacın karekodunu kameraya okutun.
+2. Ekrana iki kez dokunup **“etiket eşleştir”** deyin.
+3. “Telefonun arka yüzünü NFC etiketine dokundurun” deyince, kutuya
+   yapıştırdığınız etikete telefonun arkasını dokundurun (30 saniye içinde).
+4. “Etiket eşleştirildi” der. Artık uygulama açıkken telefonu o etikete
+   dokundurmanız yeterli: **kamera olmadan** ilacın adı ve son kullanma tarihi
+   söylenir (hatırlatma saatindeyse doğru ilaç kontrolü de yapılır).
+
+Notlar:
+- Etikete hiçbir şey yazılmaz; yalnızca etiketin değişmez kimliği okunup
+  telefonda “bu kimlik şu ilacın kutusu” diye saklanır. Bu yüzden ucuz,
+  yazılamayan etiketler de olur.
+- Son kullanma tarihi eşleştirme anındaki kutudan gelir. **Kutu değişince
+  etiketi yeni kutuyla yeniden eşleştirin.** Aynı etiketi yeniden eşleştirmek
+  eski kaydın yerine geçer.
+- Telefonda NFC yoksa ya da kapalıysa “etiket eşleştir” denince bu sesle
+  söylenir; uygulamanın geri kalanı etkilenmez.
+- Etiket yalnızca uygulama **açıkken** okunur.
+- **Hangi etiket?** NFC Forum uyumlu, 13,56 MHz, ISO 14443-A etiketler:
+  **NTAG213 / NTAG215 / NTAG216** yapışkanlı (sticker) etiketler en uygunu
+  ve en ucuzudur. Metal yüzeylere (alüminyum folyo) yapıştırılacaksa
+  **“metal üstü / anti-metal”** etiket seçin. 125 kHz (RFID/EM4100) etiketler
+  telefonla **okunmaz**.
 
 ### Bip sesiyle yönlendirme
 
@@ -167,7 +232,10 @@ düğmesine basın) ve şunlardan birini söyleyin. TalkBack açıksa aşağıda
 | `lib/ajanda.dart` | Hatırlatma listesi: ekleme, silme, saate göre bulma, sesli okuma metni; `shared_preferences` ile kalıcı saklama. |
 | `lib/hatirlatma_servisi.dart` | Günlük bildirimleri kurar (`flutter_local_notifications`, `timezone`, Europe/Istanbul), “Aldım/Ertele” düğmelerini işler. |
 | `lib/zamanlama.dart` | Bildirimin ne zaman çalacağını hesaplayan saf Dart fonksiyonları. |
-| `lib/ilac_veritabani.dart` | Barkoddan ilaç adını bulur; adı sesli okunacak hale getirir (“MG” → “miligram”). |
+| `lib/ilac_veritabani.dart` | Barkoddan ilaç adını bulur; kısa ve sesli okunacak ad (“CORASPIN 100 MG 30 ENTERIK…” → “Coraspin 100 miligram”); marka indeksi. |
+| `lib/yazi_eslestirme.dart` | Kutu yazısını (OCR metni) ilaç listesindeki markalarla eşleştiren saf Dart kodu. |
+| `lib/yazi_okuyucu.dart` | Fotoğraf çekip yazıyı cihaz üzerinde okur (`camera`, `google_mlkit_text_recognition`). |
+| `lib/nfc_etiketleri.dart` | NFC etiket kimliği ↔ ilaç eşleşmelerini saklar (`nfc_manager`, `shared_preferences`). |
 | `lib/karekod.dart` | İlaç karekodunu çözer, son kullanma tarihini Türkçe cümleye çevirir. |
 | `lib/turkce.dart` | Türkçe küçük harf, kelimelere bölme, “09:00'da / 20:00'de” ekleri. |
 | `assets/ilaclar.tsv` | ~18 bin ilacın barkodu ve adı (TİTCK listesinden). |
@@ -189,17 +257,40 @@ bildirimler o gün için iptal edilip ertesi günden başlayacak şekilde yenide
 kurulur. Hatırlatmada ilacı ayırt etmek için karekoddaki ürün numarası (GTIN)
 saklanır.
 
-### İlaç adları nereden geliyor?
+### İlaç listesi: nereden geliyor, nasıl güncellenir?
 
-`assets/ilaclar.tsv`, Türkiye İlaç ve Tıbbi Cihaz Kurumu'nun (TİTCK) yayımladığı
-“SKRS e-Reçete İlaç ve Diğer Farmasötik Ürünler Listesi”nden (aktif ve pasif
-ürünler) üretildi. Güncellemek için:
+**Uygulamadaki liste gerçektir.** `assets/ilaclar.tsv`, Türkiye İlaç ve Tıbbi
+Cihaz Kurumu'nun (TİTCK) yayımladığı “SKRS e-Reçete İlaç ve Diğer Farmasötik
+Ürünler Listesi”nin aktif ve pasif ürünlerinden üretildi (18.241 ürün).
+Uydurma örnek kayıtlar **yalnızca testlerde** (`test/ilac_tanima_test.dart`)
+vardır ve orada açıkça “gerçek değildir” diye işaretlenmiştir; uygulamanın
+kullandığı listede uydurma kayıt yoktur.
 
-1. <https://www.titck.gov.tr/dinamikmodul/43> adresinden en yeni Excel'i indirin.
-2. `pip install openpyxl`
-3. `python3 tool/ilac_listesi_guncelle.py indirilen.xlsx`
+Dosya biçimi: her satırda bir ilaç, **barkod ⇥ ilaç adı** (sekmeyle ayrılmış
+CSV, yani TSV). Sekme kullanıldı çünkü ilaç adlarında virgül geçiyor.
 
-Listede olmayan bir ilaçta uygulama yalnızca son kullanma tarihini söyler.
+```
+8699546130238	CORASPIN 100 MG 30 ENTERIK KAPLI TABLET
+```
+
+Listeyi TİTCK'nin en yeni yayınıyla güncellemek için, adım adım:
+
+1. Tarayıcıda <https://www.titck.gov.tr/dinamikmodul/43> sayfasını açın.
+2. En üstteki (en yeni tarihli) **“SKRS E-Reçete İlaç ve Diğer Farmasötik
+   Ürünler Listesi”** Excel (.xlsx) dosyasını indirin.
+3. Bilgisayarda Python 3 kurulu olmalı. Excel okuyucuyu kurun:
+   `pip install openpyxl`
+4. Bu klasörde çalıştırın:
+   `python3 tool/ilac_listesi_guncelle.py ~/Downloads/indirilen_dosya.xlsx`
+   Betik “AKTİF ÜRÜNLER LİSTESİ” ve “PASİF ÜRÜNLER LİSTESİ” sayfalarındaki
+   *İlaç Adı* ve *Barkod* sütunlarını alır ve `assets/ilaclar.tsv` dosyasını
+   yeniden yazar (ekrana kaç ilaç yazıldığını söyler).
+5. `flutter test` ile kontrol edin, sonra uygulamayı yeniden derleyin
+   (`flutter run` ya da `flutter build apk`).
+
+Listeye elle ilaç eklemek isterseniz `assets/ilaclar.tsv` dosyasının sonuna
+aynı biçimde (barkod, sekme, ad) bir satır ekleyebilirsiniz; ancak bir sonraki
+güncellemede betik dosyayı baştan yazar.
 
 ### Android ayarları (AndroidManifest.xml)
 
@@ -210,6 +301,8 @@ Listede olmayan bir ilaçta uygulama yalnızca son kullanma tarihini söyler.
 - `SCHEDULE_EXACT_ALARM`: hatırlatmanın tam saatinde gelmesi (Android 12+).
 - `RECEIVE_BOOT_COMPLETED`: telefon yeniden başlayınca hatırlatmaları
   yeniden kurmak.
+- `NFC` (isteğe bağlı, `android.hardware.nfc` zorunlu değil): etiketle
+  tanıma. NFC'siz telefonlara da kurulur.
 - `TTS_SERVICE` ve `RecognitionService` sorguları: Android 11+ telefonlarda
   metin okuma ve konuşma tanıma hizmetlerini bulabilmek.
 - `flutter_local_notifications` alıcıları: zamanlanmış bildirimler, yeniden

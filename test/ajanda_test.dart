@@ -44,7 +44,7 @@ void main() {
       expect(
         a.okunacakMetin(),
         "2 hatırlatmanız var. sabah 09:00'da ilacınız. "
-        "akşam 20:00'de majezik 100 miligram 15 film tablet.",
+        "akşam 20:00'de Majezik 100 miligram.",
       );
       expect(Ajanda().okunacakMetin(), 'Kurulu hatırlatmanız yok.');
     });

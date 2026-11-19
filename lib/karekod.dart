@@ -169,14 +169,27 @@ String ayYilYaz(DateTime tarih) => '${_aylar[tarih.month - 1]} ${tarih.year}';
 /// Okunan kod için sesli söylenecek Türkçe metni hazırlar.
 ///
 /// [ilacAdi] verilirse (TİTCK listesinde bulunduysa) cümlenin başında
-/// ilacın adı söylenir.
-String sesliMetinHazirla(String ham, {DateTime? bugun, String? ilacAdi}) {
-  final adCumlesi = ilacAdi == null || ilacAdi.isEmpty ? '' : '$ilacAdi. ';
+/// ilacın adı söylenir. [adListedeYok] doğruysa ve bu bir ilaç karekoduysa
+/// adın listede bulunamadığı söylenir.
+String sesliMetinHazirla(
+  String ham, {
+  DateTime? bugun,
+  String? ilacAdi,
+  bool adListedeYok = false,
+}) {
   final ilac = karekoduCoz(ham);
+  final adCumlesi = ilacAdi != null && ilacAdi.isNotEmpty
+      ? '$ilacAdi. '
+      : adListedeYok && ilac != null
+      ? 'İlaç karekodu okundu ama ilacın adı listede yok. '
+      : '';
   if (ilac != null) {
     final skt = ilac.sonKullanma;
     if (skt == null) {
-      return '$adCumlesiİlaç karekodu okundu. Son kullanma tarihi bulunamadı.';
+      final okundu = adCumlesi.startsWith('İlaç karekodu okundu')
+          ? ''
+          : 'İlaç karekodu okundu. ';
+      return '$adCumlesi${okundu}Son kullanma tarihi bulunamadı.';
     }
     final metin = 'Son kullanma tarihi ${ayYilYaz(skt)}.';
     if (tarihiGecmisMi(skt, bugun: bugun)) {

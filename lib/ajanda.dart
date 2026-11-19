@@ -50,8 +50,13 @@ class Hatirlatma {
   String get saatYazisi => saatMetni(saat, dakika);
 
   /// Sesli okunacak ad: "parol 500 miligram" ya da "ilacınız".
-  String get okunacakAd =>
-      ilacAdi == null ? 'ilacınız' : konusmaIcinAd(ilacAdi!);
+  /// Sesli okunacak kısa ad: "Coraspin 100 miligram" ya da "ilacınız".
+  String get okunacakAd => ilacAdi == null ? 'ilacınız' : kisaAd(ilacAdi!);
+
+  /// "Saat 09:00. Coraspin 100 miligram alma zamanı." cümlesi.
+  String get almaZamaniCumlesi =>
+      'Saat $saatYazisi. '
+      '${ilacAdi == null ? 'İlacınızı' : kisaAd(ilacAdi!)} alma zamanı.';
 
   Hatirlatma kopyala({DateTime? sonAlim, DateTime? sonErteleme}) => Hatirlatma(
     id: id,
@@ -165,22 +170,56 @@ class Ajanda {
   /// Şu anki zamana en yakın hatırlatma: saati 2 saat öncesi ile 1 saat
   /// sonrası arasında olan. "Aldım" denince hangi ilaç olduğunu bulmak için.
   Hatirlatma? simdikiHatirlatma(DateTime simdi) {
-    Hatirlatma? enYakin;
-    var enKucukFark = 1 << 30;
+    final liste = simdikiHatirlatmalar(simdi);
+    return liste.isEmpty ? null : liste.first;
+  }
+
+  /// Saati şu an civarında (2 saat önce ile 1 saat sonra arası) olan
+  /// hatırlatmalar, şu ana en yakın olan önce.
+  List<Hatirlatma> simdikiHatirlatmalar(DateTime simdi) {
     final simdiDakika = simdi.hour * 60 + simdi.minute;
-    for (final h in _liste) {
+    int fark(Hatirlatma h) {
       // Gece yarısını aşan farkları da doğru hesapla.
-      var fark = simdiDakika - (h.saat * 60 + h.dakika);
-      if (fark > 720) fark -= 1440;
-      if (fark < -720) fark += 1440;
-      if (fark < -60 || fark > 120) continue;
-      if (fark.abs() < enKucukFark) {
-        enKucukFark = fark.abs();
-        enYakin = h;
+      var f = simdiDakika - (h.saat * 60 + h.dakika);
+      if (f > 720) f -= 1440;
+      if (f < -720) f += 1440;
+      return f;
+    }
+
+    return _liste.where((h) => fark(h) >= -60 && fark(h) <= 120).toList()
+      ..sort((a, b) => fark(a).abs().compareTo(fark(b).abs()));
+  }
+
+  /// Hatırlatma saatinde bir kutu okutulunca doğru ilaç mı diye bakar.
+  ///
+  /// Bildirime dokunularak açıldıysa [bildirimId] o hatırlatmadır; yoksa
+  /// saati şu an civarında olan hatırlatmalara bakılır. Şu an bekleyen bir
+  /// hatırlatma yoksa `null` döner.
+  ({bool dogru, Hatirlatma hatirlatma})? ilacKontrolu(
+    String? barkod,
+    DateTime simdi, {
+    int? bildirimId,
+  }) {
+    final bildirimdeki = bildirimId == null ? null : bul(bildirimId);
+    final adaylar =
+        (bildirimdeki != null ? [bildirimdeki] : simdikiHatirlatmalar(simdi))
+            .where((h) => h.gtin != null)
+            .toList();
+    if (adaylar.isEmpty || barkod == null) return null;
+    for (final h in adaylar) {
+      if (IlacVeritabani.ayniUrun(h.gtin, barkod)) {
+        return (dogru: true, hatirlatma: h);
       }
     }
-    return enYakin;
+    return (dogru: false, hatirlatma: adaylar.first);
   }
+
+  /// Kontrol sonucunun söylenecek cümlesi.
+  static String ilacKontrolCumlesi(({bool dogru, Hatirlatma hatirlatma}) k) =>
+      k.dogru
+      ? 'Evet, doğru ilaç.'
+      : 'Dikkat, bu hatırlatılan ilaç değil. Şu an hatırlatılan: '
+            '${k.hatirlatma.okunacakAd}.';
 
   /// Ajandanın sesli okunacak metni.
   String okunacakMetin() {

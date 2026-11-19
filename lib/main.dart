@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:nfc_manager/nfc_manager.dart';
+import 'package:nfc_manager/nfc_manager_android.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:vibration/vibration.dart';
 
@@ -14,9 +16,12 @@ import 'hatirlatma_servisi.dart';
 import 'ilac_veritabani.dart';
 import 'karekod.dart';
 import 'komutlar.dart';
+import 'nfc_etiketleri.dart';
 import 'saat_ayristir.dart';
 import 'ses.dart';
 import 'turkce.dart';
+import 'yazi_eslestirme.dart';
+import 'yazi_okuyucu.dart';
 import 'zamanlama.dart';
 
 void main() {
@@ -49,7 +54,8 @@ class IlacAsistaniApp extends StatelessWidget {
 }
 
 /// Son okunan ilaç: hatırlatma kurarken kullanılır.
-typedef OkunanIlac = ({String gtin, String? ad});
+/// [karekod]: ilaç karekoduyla okunduysa ham karekod (NFC eşleştirmesi için).
+typedef OkunanIlac = ({String gtin, String? ad, String? karekod});
 
 class TaramaEkrani extends StatefulWidget {
   const TaramaEkrani({super.key});
@@ -72,7 +78,7 @@ class _TaramaEkraniState extends State<TaramaEkrani>
   static const _yardimMetni =
       'Şunları söyleyebilirsiniz: tekrar söyle. Feneri aç. Feneri kapat. '
       'Ajandamı oku. Dokuzdaki hatırlatmayı sil. Aldım. Ertele. Sus. '
-      'Bip sesini kapat. Bip sesini aç. '
+      'Bip sesini kapat. Bip sesini aç. Etiket eşleştir. '
       'Bir ilaç okuttuktan sonra, her gün saat dokuzda hatırlat da '
       'diyebilirsiniz.';
 
@@ -106,6 +112,22 @@ class _TaramaEkraniState extends State<TaramaEkrani>
   Timer? _ipucuZamanlayici;
 
   bool _onPlanda = true;
+
+  // Karekod bulunamazsa kutu yazısından okuma (10 saniye sonra).
+  final KutuYazisiOkuyucu _yaziOkuyucu = KutuYazisiOkuyucu();
+  final AramaIpucu _yaziOkumaZamani = AramaIpucu(
+    ilkBekleme: const Duration(seconds: 10),
+    sonrakiBekleme: const Duration(seconds: 20),
+  );
+
+  // NFC etiketleri (isteğe bağlı).
+  final EtiketDeposu _etiketler = EtiketDeposu();
+  bool _nfcOturumu = false;
+  OkunanIlac? _eslestirilecek;
+  Timer? _eslestirmeZamanlayici;
+
+  /// Bildirime dokunulma zamanı: doğru ilaç kontrolü 2 saat geçerlidir.
+  DateTime _sonBildirimZamani = DateTime.fromMillisecondsSinceEpoch(0);
 
   /// TalkBack açık mı? Ekrandaki açıklamalar buna göre değişir.
   bool _ekranOkuyucuAcik = false;
@@ -143,6 +165,9 @@ class _TaramaEkraniState extends State<TaramaEkrani>
     WidgetsBinding.instance.removeObserver(this);
     _bipleriDurdur();
     _ipucuZamanlayici?.cancel();
+    _eslestirmeZamanlayici?.cancel();
+    unawaited(_nfcDurdur());
+    unawaited(_yaziOkuyucu.kapat());
     unawaited(_ses.sustur());
     unawaited(_kamera.dispose());
     super.dispose();
@@ -152,6 +177,8 @@ class _TaramaEkraniState extends State<TaramaEkrani>
   void didChangeAppLifecycleState(AppLifecycleState durum) {
     _onPlanda = durum == AppLifecycleState.resumed;
     if (!_onPlanda) _bipleriDurdur();
+    if (durum == AppLifecycleState.paused) unawaited(_nfcDurdur());
+    if (_onPlanda && _acilisBitti) unawaited(_nfcBaslat());
     if (durum != AppLifecycleState.resumed || !_acilisBitti) return;
     // Kullanıcı ses ayarlarından Türkçe sesi yüklemiş olabilir.
     unawaited(() async {
@@ -231,6 +258,8 @@ class _TaramaEkraniState extends State<TaramaEkrani>
     _mesgul = false;
     _acilisBitti = true;
     _aramaIpucu.sifirla(DateTime.now());
+    _yaziOkumaZamani.sifirla(DateTime.now());
+    unawaited(_nfcBaslat());
     _ipucuZamanlayici = Timer.periodic(
       const Duration(seconds: 1),
       (_) => _ipucuKontrol(),
@@ -467,20 +496,45 @@ class _TaramaEkraniState extends State<TaramaEkrani>
         simdi.difference(_sonOkumaZamani) < _tekrarBeklemeSuresi) {
       return;
     }
+    _yaziOkumaZamani.sifirla(simdi);
+    await _ilaciTanit(ham);
+  }
+
+  /// Bildirime dokunulduktan sonraki 2 saat içinde o hatırlatma geçerlidir.
+  int? get _gecerliBildirimId =>
+      DateTime.now().difference(_sonBildirimZamani) < const Duration(hours: 2)
+      ? _sonBildirimId
+      : null;
+
+  /// Kameradan ya da NFC etiketinden gelen kodu tanıtır: ilacın adı, son
+  /// kullanma tarihi ve hatırlatma saatindeyse doğru ilaç mı.
+  Future<void> _ilaciTanit(String ham) async {
     _sonKod = ham;
-    _sonOkumaZamani = simdi;
+    _sonOkumaZamani = DateTime.now();
 
     final ilac = karekoduCoz(ham);
     final barkod = ilac?.gtin ?? rakamliBarkod(ham);
     final ad = _ilaclar.ad(barkod);
     if (barkod != null && (ilac != null || ad != null)) {
-      _sonOkunanIlac = (gtin: barkod, ad: ad);
+      _sonOkunanIlac = (
+        gtin: barkod,
+        ad: ad,
+        karekod: ilac != null ? ham : null,
+      );
     }
 
-    final metin = sesliMetinHazirla(
+    var metin = sesliMetinHazirla(
       ham,
-      ilacAdi: ad == null ? null : konusmaIcinAd(ad),
+      ilacAdi: ad == null ? null : kisaAd(ad),
+      adListedeYok: ad == null,
     );
+    final kontrol = _ajanda.ilacKontrolu(
+      barkod,
+      DateTime.now(),
+      bildirimId: _gecerliBildirimId,
+    );
+    if (kontrol != null) metin += ' ${Ajanda.ilacKontrolCumlesi(kontrol)}';
+
     unawaited(_titret());
     await _mesgulken(() async {
       if (mounted) setState(() => _durum = metin);
@@ -489,10 +543,11 @@ class _TaramaEkraniState extends State<TaramaEkrani>
         await _komutIsle(arayaGiren);
         return;
       }
-      // Geçerli bir ilaç karekodu okunduysa hatırlatma teklif et.
+      // Geçerli bir ilaç karekodu okunduysa hatırlatma teklif et (şu an
+      // zaten bir hatırlatma bekleniyorsa sorma).
       final skt = ilac?.sonKullanma;
       final gecerli = skt == null || !tarihiGecmisMi(skt);
-      if (ilac?.gtin != null && gecerli && _mikrofonVar) {
+      if (ilac?.gtin != null && gecerli && _mikrofonVar && kontrol == null) {
         await _hatirlatmaAkisi(sor: true);
       }
     });
@@ -545,16 +600,176 @@ class _TaramaEkraniState extends State<TaramaEkrani>
     );
   }
 
-  /// Saniyede bir çalışır: 15 saniye boyunca kod bulunamazsa ipucu verir.
+  /// Saniyede bir çalışır: 10 saniye karekod okunamazsa kutu yazısını
+  /// okumayı dener, 15 saniye kod bulunamazsa ipucu verir.
   void _ipucuKontrol() {
     final simdi = DateTime.now();
     if (!_kameraIzniVar || !_bosta) {
       _aramaIpucu.mesgulOldu(simdi);
+      _yaziOkumaZamani.mesgulOldu(simdi);
+      return;
+    }
+    if (_yaziOkumaZamani.ipucuVerilsinMi(simdi)) {
+      unawaited(_yazidanOku());
       return;
     }
     if (_aramaIpucu.ipucuVerilsinMi(simdi)) {
       unawaited(_mesgulken(() => _konus(AramaIpucu.metin)));
     }
+  }
+
+  // ---------------------------------------------------------------------
+  // Karekod okunamazsa kutu yazısından tahmin
+  // ---------------------------------------------------------------------
+
+  /// Tarayıcıyı kısa süre durdurup fotoğraf çeker, yazıyı okur ve ilaç
+  /// listesindeki adlarla eşleştirmeye çalışır. Eşleşme yoksa sessiz kalır.
+  /// Sonuç kesin olmadığı için hep "muhtemelen" denir; doz önerisi verilmez.
+  Future<void> _yazidanOku() async {
+    await _mesgulken(() async {
+      final fenerAcik = _kamera.value.torchState == TorchState.on;
+      String? yazi;
+      try {
+        await _kamera.stop();
+        yazi = await _yaziOkuyucu.fotografCekVeOku(fenerAcik: fenerAcik);
+      } finally {
+        try {
+          await _kamera.start();
+          if (fenerAcik && _kamera.value.torchState != TorchState.on) {
+            await _kamera.toggleTorch();
+          }
+        } catch (e) {
+          debugPrint('Kamera yeniden açılamadı: $e');
+        }
+      }
+      if (yazi == null || yazi.trim().isEmpty) return;
+      final eslesme = yazidanIlacBul(yazi, _ilaclar.markaIndeksi);
+      if (eslesme == null) return;
+      unawaited(_titret());
+      await _konus(eslesme.cumle);
+    });
+  }
+
+  // ---------------------------------------------------------------------
+  // NFC etiketleri (isteğe bağlı)
+  // ---------------------------------------------------------------------
+
+  Future<NfcAvailability> _nfcDurumu() async {
+    try {
+      return await NfcManager.instance.checkAvailability();
+    } catch (_) {
+      return NfcAvailability.unsupported;
+    }
+  }
+
+  /// Uygulama ön plandayken etiketleri dinler. NFC yoksa sessizce geçer.
+  Future<void> _nfcBaslat() async {
+    if (_nfcOturumu) return;
+    if (await _nfcDurumu() != NfcAvailability.enabled) return;
+    try {
+      _nfcOturumu = true;
+      await NfcManager.instance.startSession(
+        pollingOptions: {NfcPollingOption.iso14443, NfcPollingOption.iso15693},
+        onDiscovered: (etiket) {
+          final android = NfcTagAndroid.from(etiket);
+          if (android != null) {
+            unawaited(_etiketOkundu(etiketKimligi(android.id)));
+          }
+        },
+      );
+    } catch (e) {
+      _nfcOturumu = false;
+      debugPrint('NFC başlatılamadı: $e');
+    }
+  }
+
+  Future<void> _nfcDurdur() async {
+    if (!_nfcOturumu) return;
+    _nfcOturumu = false;
+    try {
+      await NfcManager.instance.stopSession();
+    } catch (_) {}
+  }
+
+  /// "etiket eşleştir": son okunan ilacı dokundurulacak etikete bağlar.
+  Future<void> _etiketEslestirmeyeBasla() async {
+    final ilac = _sonOkunanIlac;
+    if (ilac == null || ilac.karekod == null) {
+      await _konus(
+        'Önce ilacın karekodunu kameraya okutun, sonra etiket eşleştir deyin.',
+      );
+      return;
+    }
+    switch (await _nfcDurumu()) {
+      case NfcAvailability.unsupported:
+        await _konus(
+          'Bu telefonda NFC yok, bu yüzden etiket kullanılamıyor. Bu özellik '
+          'isteğe bağlıdır; uygulamanın diğer özellikleri çalışmaya devam eder.',
+        );
+        return;
+      case NfcAvailability.disabled:
+        await _konus(
+          'Telefonunuzun NFC özelliği kapalı. Telefonun Ayarlar bölümünde, '
+          'bağlantılar altından NFC\'yi açabilirsiniz. Sonra tekrar etiket '
+          'eşleştir deyin.',
+        );
+        return;
+      case NfcAvailability.enabled:
+        break;
+    }
+    await _nfcBaslat();
+    _eslestirilecek = ilac;
+    _eslestirmeZamanlayici?.cancel();
+    _eslestirmeZamanlayici = Timer(const Duration(seconds: 30), () {
+      if (_eslestirilecek == null) return;
+      _eslestirilecek = null;
+      unawaited(_konus('Etiket bulunamadı, eşleştirme iptal edildi.'));
+    });
+    final ad = ilac.ad == null ? 'Bu ilaç' : kisaAd(ilac.ad!);
+    await _konus(
+      '$ad için etiket eşleştireceğim. Telefonun arka yüzünü NFC etiketine '
+      'dokundurun.',
+    );
+  }
+
+  Future<void> _etiketOkundu(String kimlik) async {
+    final bekleyen = _eslestirilecek;
+    if (bekleyen != null && bekleyen.karekod != null) {
+      _eslestirilecek = null;
+      _eslestirmeZamanlayici?.cancel();
+      await _etiketler.eslestir(
+        kimlik,
+        EtiketKaydi(
+          karekod: bekleyen.karekod!,
+          gtin: bekleyen.gtin,
+          ilacAdi: bekleyen.ad,
+        ),
+      );
+      unawaited(_titret());
+      final ad = bekleyen.ad == null ? 'İlaç' : kisaAd(bekleyen.ad!);
+      await _mesgulken(
+        () => _konus(
+          'Etiket eşleştirildi: $ad. Artık telefonu bu etikete dokundurunca '
+          'kamera olmadan ilacı söyleyeceğim. Kutu değişirse etiketi yeniden '
+          'eşleştirin.',
+        ),
+      );
+      return;
+    }
+    if (_mesgul || _ses.konusuyor || _ses.dinliyor.value) return;
+    final kayit = await _etiketler.bul(kimlik);
+    if (kayit == null) {
+      await _mesgulken(
+        () => _konus(
+          'Bu etiket henüz bir ilaçla eşleştirilmemiş. Önce ilacı karekodla '
+          'okutun, sonra etiket eşleştir deyin.',
+        ),
+      );
+      return;
+    }
+    _yaziOkumaZamani.sifirla(DateTime.now());
+    _aramaIpucu.sifirla(DateTime.now());
+    await _ilaciTanit(kayit.karekod);
   }
 
   // ---------------------------------------------------------------------
@@ -609,7 +824,7 @@ class _TaramaEkraniState extends State<TaramaEkrani>
     // Onay: saat, sabah/akşam bilgisiyle açıkça söylenir.
     for (var deneme = 0; deneme < 2; deneme++) {
       final s = saat!;
-      final adKismi = ilac.ad == null ? '' : '${konusmaIcinAd(ilac.ad!)} için ';
+      final adKismi = ilac.ad == null ? '' : '${kisaAd(ilac.ad!)} için ';
       final cevap = await _evetHayirSor(
         '${adKismi}her gün ${gununBolumu(s.saat)} '
         '${ekliSaatMetni(s.saat, s.dakika)} hatırlatma kurulacak. '
@@ -760,10 +975,10 @@ class _TaramaEkraniState extends State<TaramaEkrani>
     final h = id == null ? null : _ajanda.bul(id);
     if (h == null) return;
     _sonBildirimId = h.id;
+    _sonBildirimZamani = DateTime.now();
     await _mesgulken(() async {
-      final ad = h.ilacAdi == null ? '' : ' İlacınız: ${h.okunacakAd}.';
       final cevap = await _sorVeDinle(
-        'Saat ${h.saatYazisi}. İlacınızı alma zamanı.$ad '
+        '${h.almaZamaniCumlesi} '
         '${_mikrofonVar ? 'Aldıysanız aldım, sonra hatırlatmamı isterseniz ertele deyin.' : ''}',
       );
       if (cevap != null) await _komutIsle(cevap);
@@ -831,6 +1046,8 @@ class _TaramaEkraniState extends State<TaramaEkrani>
         await _bipAyarla(true);
       case KomutTuru.bipKapat:
         await _bipAyarla(false);
+      case KomutTuru.etiketEslestir:
+        await _etiketEslestirmeyeBasla();
       case KomutTuru.bilinmiyor:
         await _konus(
           'Anlayamadım. Neler yapabileceğimi duymak için yardım deyin.',

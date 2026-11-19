@@ -132,10 +132,7 @@ class HatirlatmaServisi {
     }
   }
 
-  static String bildirimMetni(Hatirlatma h) {
-    final ad = h.ilacAdi == null ? '' : ' (${h.ilacAdi})';
-    return 'Saat ${h.saatYazisi}. İlacınızı alma zamanı.$ad';
-  }
+  static String bildirimMetni(Hatirlatma h) => h.almaZamaniCumlesi;
 
   /// Hatırlatmanın günlük bildirimini ve "aldım denmezse" tekrarlarını kurar.
   Future<void> kur(Hatirlatma h) async {

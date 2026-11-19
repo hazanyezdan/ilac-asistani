@@ -12,6 +12,9 @@
     <!-- Telefon yeniden başlayınca hatırlatmaları yeniden kurmak için -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <!-- Kamerası olmayan cihazlarda da kurulabilsin -->
+    <!-- İsteğe bağlı: NFC etiketiyle ilaç tanıma -->
+    <uses-permission android:name="android.permission.NFC" />
+    <uses-feature android:name="android.hardware.nfc" android:required="false" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
 

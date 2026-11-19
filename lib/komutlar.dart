@@ -18,6 +18,7 @@ enum KomutTuru {
   sus,
   bipAc,
   bipKapat,
+  etiketEslestir,
   bilinmiyor,
 }
 
@@ -99,6 +100,9 @@ Komut komutuTani(String cumle) {
     return const Komut(KomutTuru.ajandaOku);
   }
   if (hatirlatmaGeciyor) return Komut(KomutTuru.hatirlatmaKur, saat: saat);
+  if (_baslayan(k, ['etiket', 'nfc', 'enefce'])) {
+    return const Komut(KomutTuru.etiketEslestir);
+  }
   // "bip sesini kapat" fener ya da "sus" komutlarından önce denenir.
   if (_baslayan(k, ['bip', 'bib'])) {
     return _baslayan(k, ['kapa', 'sus', 'kes', 'durdur', 'istemiyorum'])
