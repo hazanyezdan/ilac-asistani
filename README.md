@@ -19,6 +19,8 @@ Görme engelli kişiler için hazırlanmış, tamamen Türkçe bir Android uygul
 - Telefonda **Türkçe ses yoksa** bunu büyük yazıyla gösterir ve nasıl
   yükleneceğini anlatır.
 
+Tüm özelliklerin ayrıntılı listesi: **[OZELLIKLER.md](OZELLIKLER.md)**
+
 ## Nasıl çalıştırılır?
 
 1. Bilgisayara [Flutter](https://docs.flutter.dev/get-started/install) ve
