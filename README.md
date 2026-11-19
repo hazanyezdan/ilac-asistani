@@ -1,9 +1,15 @@
 # İlaç Asistanı
 
-Görme engelli kişiler için hazırlanmış bir Android uygulaması. Telefonun
-kamerasını ilaç kutusuna tutunca karekodu ya da barkodu okur, telefonu titretir
-ve okuduğunu **Türkçe sesli** söyler. İlaç karekodunda son kullanma tarihini
-bulup örneğin **“Son kullanma tarihi Mart 2027”** der.
+Görme engelli kişiler için hazırlanmış, tamamen Türkçe bir Android uygulaması.
+
+- Kamerayı ilaç kutusuna tutunca karekodu ya da barkodu okur, telefonu titretir
+  ve **ilacın adını ve son kullanma tarihini sesli söyler**
+  (“Majezik 100 miligram 15 film tablet. Son kullanma tarihi Mart 2027.”).
+- Ardından **“Bu ilaç için hatırlatma kurmak ister misiniz?”** diye sorar ve
+  cevabı **sesle** alır. Hiçbir düğme aramanız gerekmez.
+- Her gün aynı saatte **bildirimle hatırlatır**; “Aldım” denmezse 10 ve 20
+  dakika sonra tekrar hatırlatır.
+- Uygulama konuşurken siz konuşmaya başlarsanız **susar ve sizi dinler**.
 
 ## Nasıl çalıştırılır?
 
@@ -25,66 +31,148 @@ bulup örneğin **“Son kullanma tarihi Mart 2027”** der.
    # dosya: build/app/outputs/flutter-apk/app-release.apk
    ```
 
-4. Uygulama ilk açılışta **kamera izni** ister; “İzin ver” deyin.
-5. Telefonda Türkçe metin okuma (TTS) sesi yüklü olmalıdır:
-   **Ayarlar → Erişilebilirlik → Metin okuma çıktısı** bölümünden Türkçe sesi
-   indirebilirsiniz.
+4. Telefonda şunlar olmalı:
+   - **Türkçe metin okuma sesi:** Ayarlar → Erişilebilirlik → Metin okuma
+     çıktısı bölümünden Türkçe sesi indirin.
+   - **Türkçe konuşma tanıma:** Google uygulaması yüklü ve güncel olmalı.
+     İnternetsiz kullanmak için Google ayarlarından Türkçe çevrimdışı konuşma
+     tanıma paketini indirebilirsiniz.
 
 Kontroller için:
 
 ```bash
 flutter analyze   # kodda hata/uyarı var mı bakar
-flutter test      # karekod çözme testlerini çalıştırır
+flutter test      # saat ayrıştırma, komut, ajanda ve karekod testleri
 ```
 
 ## Uygulama nasıl kullanılır?
 
-- Uygulama açılınca “İlaç Asistanı hazır” der ve kamera hemen taramaya başlar.
-  Bir düğmeye basmanız gerekmez.
-- İlaç kutusunu telefonun arka kamerasına yavaşça yaklaştırın.
-- Kod okununca telefon kısa bir süre **titrer** ve bilgiyi **sesli söyler**.
-- Son kullanma tarihi geçmişse önce **“Dikkat! Bu ilacın son kullanma tarihi
-  geçmiş”** uyarısı gelir.
-- Ekranın altında iki büyük düğme var:
-  - **Tekrar söyle**: son okunan bilgiyi yeniden söyler.
-  - **Feneri aç / kapat**: karanlıkta okumayı kolaylaştırır.
-- Ekran **TalkBack** ile kullanılabilir: kamera alanı, durum yazısı ve
-  düğmeler TalkBack tarafından açıklamalı okunur.
+### İlk açılış: izinler sesle anlatılır
+
+1. Uygulama kendini tanıtır ve **mikrofon iznini** neden istediğini söyler.
+   Ekrandaki izin penceresinde “Uygulamayı kullanırken izin ver”e dokunun.
+   (Android'in izin penceresi sesle cevaplanamaz; bu yüzden ne yapılacağı
+   önceden sesle anlatılır. TalkBack bu pencereyi de okur.)
+2. Mikrofon açıldıktan sonra **“Kameraya izin vermek istiyor musunuz?”** diye
+   sorar. **“Evet”** derseniz kamera izin penceresi açılır; **“Hayır”** derseniz
+   kamera kapalı kalır ve daha sonra “kamera izni” diyerek açabilirsiniz.
+3. İzin verilmezse, ayarlardan nasıl açılacağı sesle anlatılır.
+
+### İlaç okutma ve hatırlatma kurma
+
+1. İlaç kutusunu telefonun arka kamerasına yavaşça yaklaştırın.
+2. Kod okununca telefon **titrer** ve ilacın **adını** ve **son kullanma
+   tarihini** söyler. Tarih geçmişse önce “Dikkat!” uyarısı gelir.
+3. Uygulama **“Bu ilaç için hatırlatma kurmak ister misiniz?”** diye sorar ve
+   mikrofonu kendiliğinden açar.
+4. “Evet” deyin. Saati sorar: **“her gün sabah dokuzda”**, “akşam sekizde”,
+   “saat dokuz buçukta”, “21:00” gibi söyleyebilirsiniz. Doğrudan
+   “evet, akşam sekizde” de diyebilirsiniz.
+5. Uygulama saati açıkça tekrar eder: **“Her gün sabah 09:00'da hatırlatma
+   kurulacak. Onaylıyor musunuz?”** “Evet” derseniz kurar, “hayır” derseniz
+   iptal eder. “Hayır, akşam dokuzda” derseniz yeni saati onaylatır.
+6. Sabah/akşam söylemezseniz **sabah** kabul edilir ama onayda açıkça söylenir.
+7. Saat anlaşılmazsa “Anlayamadım, saati tekrar söyler misiniz?” der; iki
+   denemeden sonra vazgeçer.
+8. İlk hatırlatmada **bildirim izni** (Android 13+) ve **alarmlar ve
+   hatırlatıcılar izni** (Android 12+) neden gerektiği sesle anlatılarak
+   istenir.
+
+### Bildirim geldiğinde
+
+- Bildirimde **“Aldım”** ve **“Ertele (10 dakika)”** düğmeleri vardır.
+- “Aldım”a basılmazsa **10 ve 20 dakika sonra** tekrar hatırlatılır.
+  “Aldım” denince o günün bekleyen tekrarları iptal edilir.
+- “Ertele” 10 dakika sonra yeniden hatırlatır.
+- Bildirime dokunursanız uygulama açılır ve **“Saat 09:00. İlacınızı alma
+  zamanı.”** der, sonra “aldım” ya da “ertele” demenizi bekler.
+- Telefon yeniden başlatılsa da hatırlatmalar yeniden kurulur.
+
+### Sesli komutlar
+
+**Ekranın herhangi bir yerine iki kez dokunun** (ya da “Sesli komut ver”
+düğmesine basın) ve şunlardan birini söyleyin:
+
+| Söyleyin | Ne olur |
+| --- | --- |
+| “tekrar söyle” | Son söylenen bilgiyi yeniden söyler |
+| “feneri aç” / “feneri kapat” | Telefonun ışığını açar / kapatır |
+| “ajandamı oku” | Kurulu hatırlatmaları saat sırasıyla okur |
+| “dokuzdaki hatırlatmayı sil” | Onay alarak o saatteki hatırlatmayı siler |
+| “aldım” | İlacı aldığınızı kaydeder, bekleyen tekrarları iptal eder |
+| “ertele” | Şu anki hatırlatmayı 10 dakika erteler |
+| “her gün saat dokuzda hatırlat” | Son okutulan ilaç için hatırlatma kurar |
+| “kamera izni” | Kamera iznini yeniden ister |
+| “yardım” | Komutları sayar |
+| “sus” | Uygulamayı susturur |
+
+**Sözünü kesme:** Uygulama uzun bir cümle söylerken konuşmaya başlarsanız
+(örneğin “feneri aç”), uygulama susar ve söylediğinizi yapar.
+
+### Ekran ve TalkBack
+
+- Siyah zemin, beyaz yazı, büyük sarı düğmeler.
+- Altta **“Hatırlatmalarım”** listesi büyük yazıyla durur; her satırda
+  “Sil” düğmesi vardır. TalkBack satırı “Her gün sabah saat 09:00, majezik…”
+  diye okur.
+- TalkBack açıkken kamera alanına odaklanıp iki kez dokunmak da dinlemeyi
+  başlatır.
 
 ## Kod ne yapıyor? (basitçe)
 
 | Dosya | Ne işe yarar |
 | --- | --- |
-| `lib/main.dart` | Uygulamanın ekranı. Kamerayı açar, okunan kodu alır, telefonu titretir, sesli söyler ve düğmeleri gösterir. |
-| `lib/karekod.dart` | İlaç karekodunu çözen kısım. Son kullanma tarihini bulur ve Türkçe cümleye çevirir. |
-| `test/karekod_test.dart` | Karekod çözmenin doğru çalıştığını kontrol eden testler. |
-| `android/app/src/main/AndroidManifest.xml` | Android ayarları: kamera ve titreşim izinleri, metin okuma (TTS) motoruna erişim. |
+| `lib/main.dart` | Ekran ve konuşma akışları: izinler, karekod okuma, hatırlatma kurma, silme, aldım/ertele, sesli komutlar. |
+| `lib/ses.dart` | Konuşma (`flutter_tts`) ve dinleme (`speech_to_text`, `tr_TR`). Uygulama konuşurken araya girilince susmayı da burası yapar. |
+| `lib/saat_ayristir.dart` | Söylenen cümleden saati bulan saf Dart fonksiyonu (`saatiAyikla`). |
+| `lib/komutlar.dart` | Cümleden komutu (“feneri aç”, “aldım”…) ve evet/hayır cevabını anlayan kod. |
+| `lib/ajanda.dart` | Hatırlatma listesi: ekleme, silme, saate göre bulma, sesli okuma metni; `shared_preferences` ile kalıcı saklama. |
+| `lib/hatirlatma_servisi.dart` | Günlük bildirimleri kurar (`flutter_local_notifications`, `timezone`, Europe/Istanbul), “Aldım/Ertele” düğmelerini işler. |
+| `lib/zamanlama.dart` | Bildirimin ne zaman çalacağını hesaplayan saf Dart fonksiyonları. |
+| `lib/ilac_veritabani.dart` | Barkoddan ilaç adını bulur; adı sesli okunacak hale getirir (“MG” → “miligram”). |
+| `lib/karekod.dart` | İlaç karekodunu çözer, son kullanma tarihini Türkçe cümleye çevirir. |
+| `lib/turkce.dart` | Türkçe küçük harf, kelimelere bölme, “09:00'da / 20:00'de” ekleri. |
+| `assets/ilaclar.tsv` | ~18 bin ilacın barkodu ve adı (TİTCK listesinden). |
+| `tool/ilac_listesi_guncelle.py` | İlaç listesini güncellemek için betik. |
+| `test/` | Birim testleri. |
 
-### Adım adım ne oluyor?
+### Saat nasıl anlaşılıyor?
 
-1. **Kamera sürekli tarar.** `mobile_scanner` paketi kamerayı açar ve
-   görüntüde bir karekod/barkod arar.
-2. **Kod bulununca** (`_kodOkundu` fonksiyonu):
-   - Aynı kod son 5 saniye içinde zaten söylendiyse tekrar söylemez
-     (aynı kutu kamerada dururken sürekli konuşmasın diye).
-   - `vibration` paketi ile telefonu titretir.
-   - `flutter_tts` paketi ile metni Türkçe (`tr-TR`) sesli okur.
-3. **Karekodu çözme** (`lib/karekod.dart`): İlaç karekodu sayılarla
-   etiketlenmiş parçalardan oluşur:
-   - `01` → ürün numarası (14 hane)
-   - `21` → seri numarası
-   - `17` → **son kullanma tarihi**, `YYAAGG` biçiminde (ör. `270331` =
-     31 Mart 2027). Gün `00` ise ayın son günü sayılır.
-   - `10` → parti numarası
+`saatiAyikla` cümleyi kelimelere böler, “dokuzda”, “on birde”, “9'da”,
+“21:00” gibi sayıları bulur; “buçuk” (30 dakika), “çeyrek geçe/var” gibi
+dakikaları ekler. “akşam”, “gece”, “öğlen” sözlerine göre saati 12 saat ileri
+alır (“akşam sekizde” → 20:00, “gece on birde” → 23:00).
 
-   Kod bu parçaları ayırır, `17` etiketindeki tarihi alır ve
-   “Son kullanma tarihi Mart 2027.” cümlesini hazırlar.
-4. **İlaç karekodu değilse:** sadece rakamlardan oluşan barkodları rakam
-   rakam (“8 6 9 …”) okur, diğer kodların içindeki yazıyı okur.
+### Hatırlatma nasıl çalışıyor?
+
+Her hatırlatma için Android'e üç günlük bildirim verilir: tam saatinde, 10
+dakika sonra ve 20 dakika sonra. “Aldım” denince 10 ve 20 dakikalık
+bildirimler o gün için iptal edilip ertesi günden başlayacak şekilde yeniden
+kurulur. Hatırlatmada ilacı ayırt etmek için karekoddaki ürün numarası (GTIN)
+saklanır.
+
+### İlaç adları nereden geliyor?
+
+`assets/ilaclar.tsv`, Türkiye İlaç ve Tıbbi Cihaz Kurumu'nun (TİTCK) yayımladığı
+“SKRS e-Reçete İlaç ve Diğer Farmasötik Ürünler Listesi”nden (aktif ve pasif
+ürünler) üretildi. Güncellemek için:
+
+1. <https://www.titck.gov.tr/dinamikmodul/43> adresinden en yeni Excel'i indirin.
+2. `pip install openpyxl`
+3. `python3 tool/ilac_listesi_guncelle.py indirilen.xlsx`
+
+Listede olmayan bir ilaçta uygulama yalnızca son kullanma tarihini söyler.
 
 ### Android ayarları (AndroidManifest.xml)
 
-- `CAMERA` izni: kodu okumak için kamera.
-- `VIBRATE` izni: kod okununca titreşim.
-- `TTS_SERVICE` sorgusu: Android 11 ve sonrasında uygulamanın telefondaki
-  metin okuma motorunu bulabilmesi için gerekli.
+- `CAMERA`: kodu okumak için kamera.
+- `VIBRATE`: kod okununca titreşim.
+- `RECORD_AUDIO`: sesli komutlar için mikrofon.
+- `POST_NOTIFICATIONS`: hatırlatma bildirimleri (Android 13+).
+- `SCHEDULE_EXACT_ALARM`: hatırlatmanın tam saatinde gelmesi (Android 12+).
+- `RECEIVE_BOOT_COMPLETED`: telefon yeniden başlayınca hatırlatmaları
+  yeniden kurmak.
+- `TTS_SERVICE` ve `RecognitionService` sorguları: Android 11+ telefonlarda
+  metin okuma ve konuşma tanıma hizmetlerini bulabilmek.
+- `flutter_local_notifications` alıcıları: zamanlanmış bildirimler, yeniden
+  başlatma ve bildirim düğmeleri için.
