@@ -337,11 +337,14 @@ class _TaramaEkraniState extends State<TaramaEkrani>
 
   Future<void> _kamerayiAc() async {
     if (_kameraIzniVar) return;
+    // Denetleyici ancak MobileScanner ekrana konduktan (ona bağlandıktan)
+    // sonra başlatılabilir; bu yüzden önce kamera alanı gösterilir.
+    if (mounted) setState(() => _kameraIzniVar = true);
     try {
       await _kamera.start();
-      if (mounted) setState(() => _kameraIzniVar = true);
     } catch (e) {
       debugPrint('Kamera açılamadı: $e');
+      if (mounted) setState(() => _kameraIzniVar = false);
     }
   }
 
@@ -868,8 +871,12 @@ class _TaramaEkraniState extends State<TaramaEkrani>
     await _mesgulken(() async {
       final skt = h.sktCumlesi();
       final cevap = await _sorVeDinle(
-        '${h.almaZamaniCumlesi} ${skt ?? ''} '
-        '${_mikrofonVar ? 'Aldıysanız aldım, sonra hatırlatmamı isterseniz ertele deyin.' : ''}',
+        [
+          h.almaZamaniCumlesi,
+          ?skt,
+          if (_mikrofonVar)
+            'Aldıysanız aldım, sonra hatırlatmamı isterseniz ertele deyin.',
+        ].join(' '),
       );
       if (cevap != null) await _komutIsle(cevap);
     });
