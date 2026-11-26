@@ -56,6 +56,21 @@ flutter analyze   # kodda hata/uyarı var mı bakar
 flutter test      # saat ayrıştırma, komut, ajanda ve karekod testleri
 ```
 
+### Demo videosu (simülasyon)
+
+`tool/demo/` klasöründeki araçlar, uygulamanın gerçek ekranını Flutter test
+ortamında çalıştırıp (kamera, mikrofon, metin okuma, izinler ve bildirimler
+taklit edilerek) bir senaryo oynatır ve altyazılı, seslendirilmiş bir demo
+videosu üretir. Bu bir **simülasyondur**, gerçek telefon kaydı değildir.
+
+```bash
+DEMO_CIKTI=/tmp/demo TZ=Europe/Istanbul flutter test tool/demo/demo_test.dart
+python3 tool/demo/video_yap.py /tmp/demo /tmp/demo/ilac_asistani_demo.mp4
+```
+
+Gerekenler: Python 3 + Pillow, ffmpeg, espeak-ng, `fonts-noto-color-emoji`.
+Betikler Flutter SDK'nın `/opt/sdk/flutter` altında olduğunu varsayar.
+
 ## Uygulama nasıl kullanılır?
 
 ### İlk açılış: izinler sesle anlatılır
